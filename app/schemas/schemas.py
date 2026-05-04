@@ -14,8 +14,8 @@ from app.models.domain import (
     FitnessSeverity,
     SpecFormat,
     SpecStatus,
-    SprintStage,
-    SprintStatus,
+    IterationStage,
+    IterationStatus,
 )
 
 
@@ -329,7 +329,7 @@ class FitnessRunRequest(APIBase):
         default=None,
         description="If omitted, runs all active functions for the project"
     )
-    sprint_id: str | None = None
+    iteration_id: str | None = None
     triggered_by: str = "api"
 
 
@@ -345,7 +345,7 @@ class FitnessRunResult(APIBase):
 
 class FitnessRunResponse(APIBase):
     project_id: str
-    sprint_id: str | None
+    iteration_id: str | None
     results: list[FitnessRunResult]
     passed: int
     failed: int
@@ -404,7 +404,7 @@ class AIContextResponse(APIBase):
 
 # ─── Loop module schemas ──────────────────────────────────────────────────────
 
-class SprintCreate(APIBase):
+class IterationCreate(APIBase):
     name: str = Field(min_length=1, max_length=200)
     goal: str | None = None
     spec_ids: list[str] = Field(default_factory=list)
@@ -412,7 +412,7 @@ class SprintCreate(APIBase):
     bounded_context_id: str | None = None
 
 
-class SprintUpdate(APIBase):
+class IterationUpdate(APIBase):
     name: str | None = Field(default=None, max_length=200)
     goal: str | None = None
     spec_ids: list[str] | None = None
@@ -420,7 +420,7 @@ class SprintUpdate(APIBase):
 
 
 class StageAdvanceRequest(APIBase):
-    """Request to advance a sprint to the next stage."""
+    """Request to advance an iteration to the next stage."""
     notes: str | None = Field(
         default=None,
         description="Optional notes for the stage transition — stored in checkpoint"
@@ -432,20 +432,20 @@ class StageAdvanceRequest(APIBase):
     force_reason: str | None = None
 
 
-class SprintReflectionUpdate(APIBase):
+class IterationReflectionUpdate(APIBase):
     """Stage 5 — Reflect payload."""
     reflection_notes: str
     spec_learnings: list[str] = Field(default_factory=list)
     adr_learnings: list[str] = Field(default_factory=list)
 
 
-class SprintOut(APIBase):
+class IterationOut(APIBase):
     id: str
     project_id: str
     name: str
     goal: str | None
-    current_stage: SprintStage
-    status: SprintStatus
+    current_stage: IterationStage
+    status: IterationStatus
     spec_ids: list[str]
     active_adr_ids: list[str]
     bounded_context_id: str | None
@@ -460,7 +460,7 @@ class SprintOut(APIBase):
 class CheckpointCreate(APIBase):
     title: str = Field(min_length=1, max_length=300)
     description: str | None = None
-    stage: SprintStage
+    stage: IterationStage
     is_required: bool = True
 
 
@@ -475,8 +475,8 @@ class CheckpointResolve(APIBase):
 
 class CheckpointOut(APIBase):
     id: str
-    sprint_id: str
-    stage: SprintStage
+    iteration_id: str
+    stage: IterationStage
     title: str
     description: str | None
     status: CheckpointStatus
@@ -493,7 +493,7 @@ class CheckpointOut(APIBase):
 class TelemetryEventOut(APIBase):
     id: str
     project_id: str
-    sprint_id: str | None
+    iteration_id: str | None
     event_type: str
     payload: dict[str, Any]
     actor_id: str | None
@@ -504,7 +504,7 @@ class TelemetryEventOut(APIBase):
 class LoopMetricOut(APIBase):
     id: str
     project_id: str
-    sprint_id: str
+    iteration_id: str
     spec_rework_count: int
     architecture_drift_count: int
     review_cycle_seconds: int | None
@@ -514,10 +514,10 @@ class LoopMetricOut(APIBase):
 
 
 class ProjectHealthOut(APIBase):
-    """Aggregated health across all sprints in a project."""
+    """Aggregated health across all iterations in a project."""
     project_id: str
-    total_sprints: int
-    completed_sprints: int
+    total_iterations: int
+    completed_iterations: int
     avg_loop_health_score: float | None
     avg_spec_rework_count: float
     avg_architecture_drift_count: float

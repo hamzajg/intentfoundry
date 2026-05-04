@@ -44,7 +44,7 @@ class TestAPIKeyGeneration:
 
 
 class TestHealthScore:
-    def test_perfect_sprint(self):
+    def test_perfect_iteration(self):
         score = _compute_health_score(
             spec_rework_count=0,
             architecture_drift_count=0,

@@ -138,7 +138,7 @@ export interface BoundedContextOut {
   created_at: string;
 }
 
-export interface SprintOut {
+export interface IterationOut {
   id: string;
   project_id: string;
   name: string;
@@ -158,7 +158,7 @@ export interface SprintOut {
 
 export interface CheckpointOut {
   id: string;
-  sprint_id: string;
+  iteration_id: string;
   stage: 'define' | 'generate' | 'validate' | 'ship' | 'reflect';
   title: string;
   description: string | null;
@@ -174,7 +174,7 @@ export interface CheckpointOut {
 export interface TelemetryEventOut {
   id: string;
   project_id: string;
-  sprint_id: string | null;
+  iteration_id: string | null;
   event_type: string;
   payload: Record<string, unknown>;
   actor_id: string | null;
@@ -185,7 +185,7 @@ export interface TelemetryEventOut {
 export interface LoopMetricOut {
   id: string;
   project_id: string;
-  sprint_id: string;
+  iteration_id: string;
   spec_rework_count: number;
   architecture_drift_count: number;
   review_cycle_seconds: number | null;
@@ -196,8 +196,8 @@ export interface LoopMetricOut {
 
 export interface ProjectHealthOut {
   project_id: string;
-  total_sprints: number;
-  completed_sprints: number;
+  total_iterations: number;
+  completed_iterations: number;
   avg_loop_health_score: number | null;
   avg_spec_rework_count: number;
   avg_architecture_drift_count: number;
@@ -322,7 +322,7 @@ export const fitnessApi = {
   
   delete: (projectId: string, id: string) => api.delete(`/projects/${projectId}/fitness/${id}`),
   
-  run: (projectId: string, data?: { function_ids?: string[]; sprint_id?: string }) =>
+  run: (projectId: string, data?: { function_ids?: string[]; iteration_id?: string }) =>
     api.post<{ project_id: string; results: unknown[]; passed: number; failed: number; errors: number; run_at: string }>(
       `/projects/${projectId}/fitness/run`,
       data
@@ -367,9 +367,9 @@ export const contextApi = {
 };
 
 export const loopApi = {
-  list: (projectId: string) => api.get<SprintOut[]>(`/projects/${projectId}/sprints`),
+  list: (projectId: string) => api.get<IterationOut[]>(`/projects/${projectId}/iterations`),
   
-  get: (projectId: string, id: string) => api.get<SprintOut>(`/projects/${projectId}/sprints/${id}`),
+  get: (projectId: string, id: string) => api.get<IterationOut>(`/projects/${projectId}/iterations/${id}`),
   
   create: (projectId: string, data: {
     name: string;
@@ -377,39 +377,39 @@ export const loopApi = {
     spec_ids?: string[];
     active_adr_ids?: string[];
     bounded_context_id?: string;
-  }) => api.post<SprintOut>(`/projects/${projectId}/sprints`, data),
+  }) => api.post<IterationOut>(`/projects/${projectId}/iterations`, data),
   
   update: (projectId: string, id: string, data: {
     name?: string;
     goal?: string;
     spec_ids?: string[];
     active_adr_ids?: string[];
-  }) => api.patch<SprintOut>(`/projects/${projectId}/sprints/${id}`, data),
+  }) => api.patch<IterationOut>(`/projects/${projectId}/iterations/${id}`, data),
   
   advance: (projectId: string, id: string, data?: { notes?: string; force?: boolean; force_reason?: string }) =>
-    api.post<SprintOut>(`/projects/${projectId}/sprints/${id}/advance`, data),
+    api.post<IterationOut>(`/projects/${projectId}/iterations/${id}/advance`, data),
   
   reflect: (projectId: string, id: string, data: {
     reflection_notes: string;
     spec_learnings?: string[];
     adr_learnings?: string[];
-  }) => api.put<SprintOut>(`/projects/${projectId}/sprints/${id}/reflection`, data),
+  }) => api.put<IterationOut>(`/projects/${projectId}/iterations/${id}/reflection`, data),
   
-  checkpoints: (projectId: string, id: string) => api.get<CheckpointOut[]>(`/projects/${projectId}/sprints/${id}/checkpoints`),
+  checkpoints: (projectId: string, id: string) => api.get<CheckpointOut[]>(`/projects/${projectId}/iterations/${id}/checkpoints`),
   
-  resolveCheckpoint: (projectId: string, sprintId: string, checkpointId: string, data: {
+  resolveCheckpoint: (projectId: string, iterationId: string, checkpointId: string, data: {
     status: 'approved' | 'rejected' | 'skipped';
     resolution_notes?: string;
     skip_reason?: string;
-  }) => api.post<CheckpointOut>(`/projects/${projectId}/sprints/${sprintId}/checkpoints/${checkpointId}/resolve`, data),
+  }) => api.post<CheckpointOut>(`/projects/${projectId}/iterations/${iterationId}/checkpoints/${checkpointId}/resolve`, data),
 };
 
 export const telemetryApi = {
   events: (projectId: string, params?: { limit?: number; offset?: number; event_type?: string }) =>
     api.get<TelemetryEventOut[]>(`/projects/${projectId}/telemetry/events`, { params }),
   
-  metrics: (projectId: string, sprintId: string) =>
-    api.get<LoopMetricOut>(`/projects/${projectId}/telemetry/metrics/${sprintId}`),
+  metrics: (projectId: string, iterationId: string) =>
+    api.get<LoopMetricOut>(`/projects/${projectId}/telemetry/metrics/${iterationId}`),
   
   projectHealth: (projectId: string) => api.get<ProjectHealthOut>(`/projects/${projectId}/telemetry/health`),
 };

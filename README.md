@@ -16,7 +16,7 @@ It provides:
 
 - **Intent Management** — versioned BDD/CDC/example-driven specifications connected to project context
 - **Architecture Governance** — ADRs and fitness functions that travel with prompts and run in CI
-- **Collaboration Loop** — the five-stage sprint cycle (Define → Generate → Validate → Ship → Reflect) with enforced human decision checkpoints
+- **Collaboration Loop** — the five-stage iteration cycle (Define → Generate → Validate → Ship → Reflect) with enforced human decision checkpoints
 - **Loop Telemetry** — real-time visibility into spec rework, architecture drift, review cycle health, and reflect stage completion
 
 IntentFoundry is the connective tissue between intent and execution. It is not a project management tool, an AI coding tool, or a documentation platform. It is what sits between them and keeps them aligned.
@@ -107,21 +107,21 @@ All endpoints are under `/api/v1/`. Authentication via `Bearer` JWT or `X-API-Ke
 | POST | `/projects/{id}/contexts` | Create bounded context |
 | POST | `/projects/{id}/ai-context` | **Build AI context package** |
 
-### Loop (Sprint cycle)
+### Loop (Iteration cycle)
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/projects/{id}/sprints` | List sprints |
-| POST | `/projects/{id}/sprints` | Create sprint |
-| POST | `/projects/{id}/sprints/{sid}/advance` | Advance stage |
-| PUT | `/projects/{id}/sprints/{sid}/reflection` | Stage 5 reflection |
-| GET | `/projects/{id}/sprints/{sid}/checkpoints` | List checkpoints |
-| POST | `/projects/{id}/sprints/{sid}/checkpoints/{cid}/resolve` | Human sign-off |
+| GET | `/projects/{id}/iterations` | List iterations |
+| POST | `/projects/{id}/iterations` | Create iteration |
+| POST | `/projects/{id}/iterations/{sid}/advance` | Advance stage |
+| PUT | `/projects/{id}/iterations/{sid}/reflection` | Stage 5 reflection |
+| GET | `/projects/{id}/iterations/{sid}/checkpoints` | List checkpoints |
+| POST | `/projects/{id}/iterations/{sid}/checkpoints/{cid}/resolve` | Human sign-off |
 
 ### Telemetry
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/projects/{id}/telemetry/events` | Event log |
-| GET | `/projects/{id}/telemetry/metrics` | Loop metrics per sprint |
+| GET | `/projects/{id}/telemetry/metrics` | Loop metrics per iteration |
 | GET | `/projects/{id}/telemetry/health` | Project health summary |
 | GET | `/projects/{id}/telemetry/stream` | **SSE real-time stream** |
 
@@ -244,7 +244,7 @@ intentfoundry/
 │   │   │   ├── projects.py     # Project CRUD
 │   │   │   ├── intent.py       # Spec management
 │   │   │   ├── architecture.py # ADRs, fitness, contexts, AI builder
-│   │   │   ├── loop.py         # Sprint lifecycle + checkpoints
+│   │   │   ├── loop.py         # Iteration lifecycle + checkpoints
 │   │   │   └── telemetry.py    # Metrics + SSE stream
 │   │   ├── deps.py             # FastAPI dependencies
 │   │   └── router.py           # Route registration
@@ -290,7 +290,7 @@ intentfoundry/
 - LiteLLM router for model-agnostic execution
 - Context auto-injection from IntentFoundry specs + ADRs
 - Agent execution history and result validation
-- Multi-agent orchestration for complex sprint tasks
+- Multi-agent orchestration for complex iteration tasks
 
 **Phase 3 — Ecosystem**
 - CLI tool (`if` command)

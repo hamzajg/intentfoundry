@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { loopApi, specApi } from '../api/client';
-import { useProjectStore, useSprintStore } from '../stores';
+import { useProjectStore, useIterationStore } from '../stores';
 import { Badge, Button, Card, Input, Modal, Spinner, Textarea } from '../components/ui';
-import type { CheckpointOut, SpecOut, SprintOut } from '../api/client';
+import type { CheckpointOut, IterationOut, SpecOut } from '../api/client';
 
 const STAGES = ['define', 'generate', 'validate', 'ship', 'reflect'] as const;
 const STAGE_LABELS: Record<string, string> = {
@@ -23,16 +23,16 @@ const STAGE_COLORS: Record<string, 'amber' | 'info' | 'success'> = {
 
 export function Loop() {
   const { activeProject } = useProjectStore();
-  const { activeSprint, setActiveSprint } = useSprintStore();
-  const [sprints, setSprints] = useState<SprintOut[]>([]);
+  const { activeIteration, setActiveIteration } = useIterationStore();
+  const [iterations, setIterations] = useState<IterationOut[]>([]);
   const [checkpoints, setCheckpoints] = useState<CheckpointOut[]>([]);
   const [specs, setSpecs] = useState<SpecOut[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [showCheckpoints, setShowCheckpoints] = useState(false);
   const [showReflect, setShowReflect] = useState(false);
-  const [selectedSprintId, setSelectedSprintId] = useState<string | null>(null);
-  const [newSprint, setNewSprint] = useState({ name: '', goal: '', spec_ids: [] as string[], active_adr_ids: [] as string[] });
+  const [selectedIterationId, setSelectedIterationId] = useState<string | null>(null);
+  const [newIteration, setNewIteration] = useState({ name: '', goal: '', spec_ids: [] as string[], active_adr_ids: [] as string[] });
   const [reflectData, setReflectData] = useState({ reflection_notes: '', spec_learnings: [] as string[], adr_learnings: [] as string[] });
   const [creating, setCreating] = useState(false);
   const [advancing, setAdvancing] = useState(false);
@@ -45,11 +45,11 @@ export function Loop() {
     if (!activeProject) return;
     setLoading(true);
     try {
-      const [sprintsRes, specsRes] = await Promise.all([loopApi.list(activeProject.id), specApi.list(activeProject.id)]);
-      setSprints(sprintsRes.data);
+      const [iterationsRes, specsRes] = await Promise.all([loopApi.list(activeProject.id), specApi.list(activeProject.id)]);
+      setIterations(iterationsRes.data);
       setSpecs(specsRes.data.items);
-      const active = sprintsRes.data.find((s) => s.status === 'active');
-      setActiveSprint(active || null);
+      const active = iterationsRes.data.find((s) => s.status === 'active');
+      setActiveIteration(active || null);
       if (active) {
         loadCheckpoints(active.id);
       }
@@ -59,9 +59,9 @@ export function Loop() {
     }
   };
 
-  const loadCheckpoints = async (sprintId: string) => {
+  const loadCheckpoints = async (iterationId: string) => {
     try {
-      const res = await loopApi.checkpoints(activeProject!.id, sprintId);
+      const res = await loopApi.checkpoints(activeProject!.id, iterationId);
       setCheckpoints(res.data);
     } catch {
     }
@@ -72,29 +72,29 @@ export function Loop() {
     if (!activeProject) return;
     setCreating(true);
     try {
-      const res = await loopApi.create(activeProject.id, newSprint);
-      setSprints([...sprints, res.data]);
+      const res = await loopApi.create(activeProject.id, newIteration);
+      setIterations([...iterations, res.data]);
       setShowCreate(false);
-      setNewSprint({ name: '', goal: '', spec_ids: [], active_adr_ids: [] });
+      setNewIteration({ name: '', goal: '', spec_ids: [], active_adr_ids: [] });
     } catch {
     } finally {
       setCreating(false);
     }
   };
 
-  const handleSelectSprint = async (sprint: SprintOut) => {
-    setSelectedSprintId(sprint.id);
-    setActiveSprint(sprint);
-    await loadCheckpoints(sprint.id);
+  const handleSelectIteration = async (iteration: IterationOut) => {
+    setSelectedIterationId(iteration.id);
+    setActiveIteration(iteration);
+    await loadCheckpoints(iteration.id);
   };
 
   const handleAdvance = async () => {
-    if (!activeProject || !activeSprint) return;
+    if (!activeProject || !activeIteration) return;
     setAdvancing(true);
     try {
-      const res = await loopApi.advance(activeProject.id, activeSprint.id);
-      setActiveSprint(res.data);
-      setSprints(sprints.map((s) => (s.id === res.data.id ? res.data : s)));
+      const res = await loopApi.advance(activeProject.id, activeIteration.id);
+      setActiveIteration(res.data);
+      setIterations(iterations.map((s) => (s.id === res.data.id ? res.data : s)));
       await loadCheckpoints(res.data.id);
     } catch {
     } finally {
@@ -104,10 +104,10 @@ export function Loop() {
 
   const handleReflect = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeProject || !activeSprint) return;
+    if (!activeProject || !activeIteration) return;
     try {
-      const res = await loopApi.reflect(activeProject.id, activeSprint.id, reflectData);
-      setActiveSprint(res.data);
+      const res = await loopApi.reflect(activeProject.id, activeIteration.id, reflectData);
+      setActiveIteration(res.data);
       setShowReflect(false);
       setReflectData({ reflection_notes: '', spec_learnings: [], adr_learnings: [] });
     } catch {
@@ -115,9 +115,9 @@ export function Loop() {
   };
 
   const handleResolveCheckpoint = async (checkpointId: string, status: 'approved' | 'skipped') => {
-    if (!activeProject || !selectedSprintId) return;
+    if (!activeProject || !selectedIterationId) return;
     try {
-      const res = await loopApi.resolveCheckpoint(activeProject.id, selectedSprintId, checkpointId, { status });
+      const res = await loopApi.resolveCheckpoint(activeProject.id, selectedIterationId, checkpointId, { status });
       setCheckpoints(checkpoints.map((c) => (c.id === res.data.id ? res.data : c)));
     } catch {
     }
@@ -127,7 +127,7 @@ export function Loop() {
     return (
       <div className="flex items-center justify-center h-full">
         <Card className="p-8 text-center">
-          <p className="text-foundry-400">Select a project to manage sprints</p>
+          <p className="text-foundry-400">Select a project to manage iterations</p>
         </Card>
       </div>
     );
@@ -141,23 +141,23 @@ export function Loop() {
     );
   }
 
-  const canAdvance = activeSprint && activeSprint.current_stage !== 'reflect';
-  const canReflect = activeSprint && activeSprint.current_stage === 'reflect';
+  const canAdvance = activeIteration && activeIteration.current_stage !== 'reflect';
+  const canReflect = activeIteration && activeIteration.current_stage === 'reflect';
 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-mono font-bold text-foundry-50">Loop</h1>
-          <p className="mt-1 text-foundry-400">Sprint lifecycle and stage progression</p>
+          <p className="mt-1 text-foundry-400">Iteration lifecycle and stage progression</p>
         </div>
-        <Button onClick={() => setShowCreate(true)}>New Sprint</Button>
+        <Button onClick={() => setShowCreate(true)}>New Iteration</Button>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3 mb-8">
         {STAGES.map((stage, idx) => {
-          const isActive = activeSprint?.current_stage === stage;
-          const isPast = activeSprint && STAGES.indexOf(activeSprint.current_stage) > idx;
+          const isActive = activeIteration?.current_stage === stage;
+          const isPast = activeIteration && STAGES.indexOf(activeIteration.current_stage) > idx;
           return (
             <Card key={stage} className={`p-4 text-center ${isActive ? 'border-amber-500/50 glow-amber-sm' : ''}`}>
               <div className={`w-8 h-8 mx-auto rounded-full flex items-center justify-center ${isActive ? 'bg-amber-500 text-white' : isPast ? 'bg-emerald-500 text-white' : 'bg-foundry-700 text-foundry-400'}`}>
@@ -170,20 +170,20 @@ export function Loop() {
         })}
       </div>
 
-      {activeSprint && (
+      {activeIteration && (
         <Card className="p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-xl font-semibold text-foundry-50">{activeSprint.name}</h2>
-              {activeSprint.goal && <p className="mt-1 text-foundry-400">{activeSprint.goal}</p>}
+              <h2 className="text-xl font-semibold text-foundry-50">{activeIteration.name}</h2>
+              {activeIteration.goal && <p className="mt-1 text-foundry-400">{activeIteration.goal}</p>}
             </div>
-            <Badge variant={STAGE_COLORS[activeSprint.current_stage]}>{activeSprint.current_stage.toUpperCase()}</Badge>
+            <Badge variant={STAGE_COLORS[activeIteration.current_stage]}>{activeIteration.current_stage.toUpperCase()}</Badge>
           </div>
 
           <div className="flex gap-2">
             {canAdvance && (
               <Button onClick={handleAdvance} loading={advancing}>
-                Advance to {STAGE_LABELS[STAGES[STAGES.indexOf(activeSprint.current_stage) + 1]]}
+                Advance to {STAGE_LABELS[STAGES[STAGES.indexOf(activeIteration.current_stage) + 1]]}
               </Button>
             )}
             {canReflect && (
@@ -195,34 +195,34 @@ export function Loop() {
       )}
 
       <Card className="p-6">
-        <h3 className="text-lg font-medium text-foundry-100 mb-4">Sprints</h3>
-        {sprints.length === 0 ? (
-          <p className="text-foundry-400">No sprints yet</p>
+        <h3 className="text-lg font-medium text-foundry-100 mb-4">Iterations</h3>
+        {iterations.length === 0 ? (
+          <p className="text-foundry-400">No iterations yet</p>
         ) : (
           <div className="space-y-2">
-            {sprints.map((sprint) => (
+            {iterations.map((iteration) => (
               <div
-                key={sprint.id}
-                onClick={() => handleSelectSprint(sprint)}
+                key={iteration.id}
+                onClick={() => handleSelectIteration(iteration)}
                 className={`p-3 rounded cursor-pointer transition-colors ${
-                  activeSprint?.id === sprint.id ? 'bg-foundry-800 border border-amber-500/30' : 'bg-foundry-800/50 hover:bg-foundry-800'
+                  activeIteration?.id === iteration.id ? 'bg-foundry-800 border border-amber-500/30' : 'bg-foundry-800/50 hover:bg-foundry-800'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="font-medium text-foundry-100">{sprint.name}</span>
-                  <Badge variant={sprint.status === 'completed' ? 'success' : sprint.status === 'active' ? 'amber' : 'neutral'}>{sprint.status}</Badge>
+                  <span className="font-medium text-foundry-100">{iteration.name}</span>
+                  <Badge variant={iteration.status === 'completed' ? 'success' : iteration.status === 'active' ? 'amber' : 'neutral'}>{iteration.status}</Badge>
                 </div>
-                {sprint.goal && <p className="mt-1 text-sm text-foundry-400">{sprint.goal}</p>}
+                {iteration.goal && <p className="mt-1 text-sm text-foundry-400">{iteration.goal}</p>}
               </div>
             ))}
           </div>
         )}
       </Card>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Sprint" size="lg">
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Iteration" size="lg">
         <form onSubmit={handleCreate} className="space-y-4">
-          <Input label="Name" value={newSprint.name} onChange={(e) => setNewSprint({ ...newSprint, name: e.target.value })} placeholder="Sprint name" required />
-          <Input label="Goal" value={newSprint.goal} onChange={(e) => setNewSprint({ ...newSprint, goal: e.target.value })} placeholder="Sprint goal" />
+          <Input label="Name" value={newIteration.name} onChange={(e) => setNewIteration({ ...newIteration, name: e.target.value })} placeholder="Iteration name" required />
+          <Input label="Goal" value={newIteration.goal} onChange={(e) => setNewIteration({ ...newIteration, goal: e.target.value })} placeholder="Iteration goal" />
           <div>
             <label className="label">Linked Specs</label>
             <div className="space-y-1 max-h-32 overflow-auto">
@@ -230,10 +230,10 @@ export function Loop() {
                 <label key={spec.id} className="flex items-center gap-2 p-2 bg-foundry-800 rounded cursor-pointer hover:bg-foundry-750">
                   <input
                     type="checkbox"
-                    checked={newSprint.spec_ids.includes(spec.id)}
+                    checked={newIteration.spec_ids.includes(spec.id)}
                     onChange={(e) => {
-                      const ids = e.target.checked ? [...newSprint.spec_ids, spec.id] : newSprint.spec_ids.filter((id) => id !== spec.id);
-                      setNewSprint({ ...newSprint, spec_ids: ids });
+                      const ids = e.target.checked ? [...newIteration.spec_ids, spec.id] : newIteration.spec_ids.filter((id) => id !== spec.id);
+                      setNewIteration({ ...newIteration, spec_ids: ids });
                     }}
                   />
                   <span className="text-sm text-foundry-100">{spec.title}</span>
@@ -279,12 +279,12 @@ export function Loop() {
         )}
       </Modal>
 
-      <Modal open={showReflect} onClose={() => setShowReflect(false)} title="Sprint Reflection" size="lg">
+      <Modal open={showReflect} onClose={() => setShowReflect(false)} title="Iteration Reflection" size="lg">
         <form onSubmit={handleReflect} className="space-y-4">
           <Textarea label="Reflection Notes" value={reflectData.reflection_notes} onChange={(e) => setReflectData({ ...reflectData, reflection_notes: e.target.value })} placeholder="What did we learn? What went well? What could be improved?" required />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setShowReflect(false)}>Cancel</Button>
-            <Button type="submit">Complete Sprint</Button>
+            <Button type="submit">Complete Iteration</Button>
           </div>
         </form>
       </Modal>

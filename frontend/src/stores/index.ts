@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { ProjectOut, SprintOut, TelemetryEventOut, UserOut } from '../api/client';
+import type { IterationOut, ProjectOut, TelemetryEventOut, UserOut } from '../api/client';
 
 interface AuthState {
   user: UserOut | null;
@@ -70,12 +70,12 @@ export const useEventStore = create<EventState>()(
   })
 );
 
-interface SprintState {
-  activeSprint: SprintOut | null;
-  setActiveSprint: (sprint: SprintOut | null) => void;
+interface IterationState {
+  activeIteration: IterationOut | null;
+  setActiveIteration: (iteration: IterationOut | null) => void;
 }
 
-export const useSprintStore = create<SprintState>()((set) => ({
-  activeSprint: null,
-  setActiveSprint: (sprint) => set({ activeSprint: sprint }),
+export const useIterationStore = create<IterationState>()((set) => ({
+  activeIteration: null,
+  setActiveIteration: (iteration) => set({ activeIteration: iteration }),
 }));

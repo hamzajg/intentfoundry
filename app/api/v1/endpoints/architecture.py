@@ -298,7 +298,7 @@ async def run_fitness_functions(
     response = await fitness_svc.run(
         project_id=project_id,
         function_ids=request.function_ids,
-        sprint_id=request.sprint_id,
+        iteration_id=request.iteration_id,
         triggered_by=request.triggered_by,
     )
     # Record architecture drift events
@@ -308,7 +308,7 @@ async def run_fitness_functions(
             project_id=project_id,
             event_type="architecture.drift_detected",
             payload={
-                "sprint_id": request.sprint_id,
+                "iteration_id": request.iteration_id,
                 "failed_functions": [f.function_id for f in failed],
                 "count": len(failed),
             },

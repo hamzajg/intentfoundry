@@ -13,8 +13,8 @@ from app.models.domain import (
     FitnessFunctionResult,
     FitnessResult,
     LoopMetric,
-    Sprint,
-    SprintStatus,
+    Iteration,
+    IterationStatus,
     TelemetryEvent,
 )
 from app.schemas.schemas import ProjectHealthOut
@@ -30,7 +30,7 @@ class TelemetryService:
         event_type: str,
         payload: dict[str, Any],
         actor_id: str | None = None,
-        sprint_id: str | None = None,
+        iteration_id: str | None = None,
         source: str = "api",
     ) -> TelemetryEvent:
         """
@@ -39,7 +39,7 @@ class TelemetryService:
         """
         event = TelemetryEvent(
             project_id=project_id,
-            sprint_id=sprint_id or payload.get("sprint_id"),
+            iteration_id=iteration_id or payload.get("iteration_id"),
             event_type=event_type,
             payload=payload,
             actor_id=actor_id,
@@ -56,13 +56,13 @@ class TelemetryService:
     async def compute_loop_metrics(
         self,
         project_id: str,
-        sprint_id: str,
+        iteration_id: str,
         force: bool = False,
     ) -> LoopMetric:
         """
-        Compute and cache loop health metrics for a sprint.
+        Compute and cache loop health metrics for a iteration.
         The four key indicators:
-          1. spec_rework_count       — how many times specs were updated mid-sprint
+          1. spec_rework_count       — how many times specs were updated mid-iteration
           2. architecture_drift_count — fitness function failures
           3. review_cycle_seconds    — time from generate→ship checkpoint resolution
           4. reflect_stage_completed — was stage 5 actually done?
@@ -72,27 +72,27 @@ class TelemetryService:
             existing = await self.db.execute(
                 select(LoopMetric).where(
                     LoopMetric.project_id == project_id,
-                    LoopMetric.sprint_id == sprint_id,
+                    LoopMetric.iteration_id == iteration_id,
                 )
             )
             metric = existing.scalar_one_or_none()
             if metric:
                 return metric
 
-        # 1. Spec rework count — spec.updated events during this sprint
+        # 1. Spec rework count — spec.updated events during this iteration
         rework_result = await self.db.execute(
             select(func.count(TelemetryEvent.id)).where(
                 TelemetryEvent.project_id == project_id,
-                TelemetryEvent.sprint_id == sprint_id,
+                TelemetryEvent.iteration_id == iteration_id,
                 TelemetryEvent.event_type == "spec.updated",
             )
         )
         spec_rework_count = rework_result.scalar_one() or 0
 
-        # 2. Architecture drift — fitness function failures during this sprint
+        # 2. Architecture drift — fitness function failures during this iteration
         drift_result = await self.db.execute(
             select(func.count(FitnessFunctionResult.id)).where(
-                FitnessFunctionResult.sprint_id == sprint_id,
+                FitnessFunctionResult.iteration_id == iteration_id,
                 FitnessFunctionResult.result == FitnessResult.FAIL,
             )
         )
@@ -101,7 +101,7 @@ class TelemetryService:
         # 3. Review cycle time — GENERATE checkpoint approved → SHIP checkpoint approved
         generate_cp = await self.db.execute(
             select(Checkpoint).where(
-                Checkpoint.sprint_id == sprint_id,
+                Checkpoint.iteration_id == iteration_id,
                 Checkpoint.stage.in_(["generate"]),
                 Checkpoint.status == CheckpointStatus.APPROVED,
             )
@@ -110,7 +110,7 @@ class TelemetryService:
 
         ship_cp = await self.db.execute(
             select(Checkpoint).where(
-                Checkpoint.sprint_id == sprint_id,
+                Checkpoint.iteration_id == iteration_id,
                 Checkpoint.stage.in_(["ship"]),
                 Checkpoint.status == CheckpointStatus.APPROVED,
             )
@@ -126,8 +126,8 @@ class TelemetryService:
         reflect_result = await self.db.execute(
             select(TelemetryEvent).where(
                 TelemetryEvent.project_id == project_id,
-                TelemetryEvent.sprint_id == sprint_id,
-                TelemetryEvent.event_type == "sprint.reflection_updated",
+                TelemetryEvent.iteration_id == iteration_id,
+                TelemetryEvent.event_type == "iteration.reflection_updated",
             )
         )
         reflect_stage_completed = reflect_result.scalar_one_or_none() is not None
@@ -141,7 +141,7 @@ class TelemetryService:
 
         # Upsert the metric
         existing_metric = await self.db.execute(
-            select(LoopMetric).where(LoopMetric.sprint_id == sprint_id)
+            select(LoopMetric).where(LoopMetric.iteration_id == iteration_id)
         )
         metric = existing_metric.scalar_one_or_none()
 
@@ -155,7 +155,7 @@ class TelemetryService:
         else:
             metric = LoopMetric(
                 project_id=project_id,
-                sprint_id=sprint_id,
+                iteration_id=iteration_id,
                 spec_rework_count=spec_rework_count,
                 architecture_drift_count=architecture_drift_count,
                 review_cycle_seconds=review_cycle_seconds,
@@ -169,13 +169,13 @@ class TelemetryService:
         return metric
 
     async def compute_project_health(self, project_id: str) -> ProjectHealthOut:
-        """Aggregate health across all sprints in a project."""
-        sprints_result = await self.db.execute(
-            select(Sprint).where(Sprint.project_id == project_id)
+        """Aggregate health across all iterations in a project."""
+        iterations_result = await self.db.execute(
+            select(Iteration).where(Iteration.project_id == project_id)
         )
-        all_sprints = sprints_result.scalars().all()
-        total = len(all_sprints)
-        completed = sum(1 for s in all_sprints if s.status == SprintStatus.COMPLETED)
+        all_iterations = iterations_result.scalars().all()
+        total = len(all_iterations)
+        completed = sum(1 for s in all_iterations if s.status == IterationStatus.COMPLETED)
 
         # Aggregate metrics
         metrics_result = await self.db.execute(
@@ -218,8 +218,8 @@ class TelemetryService:
 
         return ProjectHealthOut(
             project_id=project_id,
-            total_sprints=total,
-            completed_sprints=completed,
+            total_iterations=total,
+            completed_iterations=completed,
             avg_loop_health_score=avg_health,
             avg_spec_rework_count=avg_rework,
             avg_architecture_drift_count=avg_drift,

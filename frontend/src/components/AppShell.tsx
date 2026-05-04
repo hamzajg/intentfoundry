@@ -1,5 +1,5 @@
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
-import { useAuthStore, useEventStore, useProjectStore, useSprintStore } from '../stores';
+import { useAuthStore, useEventStore, useProjectStore, useIterationStore } from '../stores';
 import { Badge } from './ui';
 
 const NAV_ITEMS = [
@@ -15,7 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { activeProject } = useProjectStore();
-  const { activeSprint } = useSprintStore();
+  const { activeIteration } = useIterationStore();
   const { sseConnected } = useEventStore();
 
   const handleLogout = () => {
@@ -24,15 +24,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   };
 
   const getStageBadge = () => {
-    if (!activeSprint) return null;
+    if (!activeIteration) return null;
     const stageColors: Record<string, 'amber' | 'success' | 'info'> = {
-      intent: 'amber',
-      plan: 'info',
-      execute: 'amber',
+      define: 'amber',
+      generate: 'info',
       validate: 'info',
+      ship: 'amber',
       reflect: 'success',
     };
-    return <Badge variant={stageColors[activeSprint.current_stage]}>{activeSprint.current_stage}</Badge>;
+    return <Badge variant={stageColors[activeIteration.current_stage]}>{activeIteration.current_stage}</Badge>;
   };
 
   return (
@@ -79,9 +79,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <span className="text-xs font-mono text-foundry-400">SSE</span>
             <span className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-emerald-500' : 'bg-red-500'}`} />
           </div>
-          {activeSprint && (
+          {activeIteration && (
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-xs font-mono text-foundry-400">Sprint</span>
+              <span className="text-xs font-mono text-foundry-400">Iteration</span>
               {getStageBadge()}
             </div>
           )}

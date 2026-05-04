@@ -5,7 +5,7 @@ Organised by the four core capabilities:
   - Project (shared root)
   - Intent:       Spec, SpecVersion
   - Architecture: ADR, FitnessFunction, BoundedContext
-  - Loop:         Sprint, Checkpoint
+  - Loop:         Iteration, Checkpoint
   - Telemetry:    TelemetryEvent, LoopMetric
 """
 from datetime import datetime
@@ -59,7 +59,7 @@ class FitnessResult(str, enum.Enum):
     ERROR = "error"             # Function itself failed to execute
     SKIPPED = "skipped"
 
-class SprintStage(str, enum.Enum):
+class IterationStage(str, enum.Enum):
     DEFINE = "define"
     GENERATE = "generate"
     VALIDATE = "validate"
@@ -72,7 +72,7 @@ class CheckpointStatus(str, enum.Enum):
     REJECTED = "rejected"
     SKIPPED = "skipped"         # Explicitly bypassed (requires reason)
 
-class SprintStatus(str, enum.Enum):
+class IterationStatus(str, enum.Enum):
     ACTIVE = "active"
     COMPLETED = "completed"
     ABANDONED = "abandoned"
@@ -108,7 +108,7 @@ class Project(BaseModel, SoftDeleteMixin):
     adrs: Mapped[list["ADR"]] = relationship(back_populates="project", lazy="select")
     fitness_functions: Mapped[list["FitnessFunction"]] = relationship(back_populates="project")
     bounded_contexts: Mapped[list["BoundedContext"]] = relationship(back_populates="project")
-    sprints: Mapped[list["Sprint"]] = relationship(back_populates="project", lazy="select")
+    iterations: Mapped[list["Iteration"]] = relationship(back_populates="project", lazy="select")
 
     __table_args__ = (
         UniqueConstraint("slug", "owner_id", name="uq_projects_slug_owner"),
@@ -289,7 +289,7 @@ class FitnessFunctionResult(BaseModel):
     function_id: Mapped[str] = mapped_column(
         String(26), ForeignKey("fitness_functions.id"), nullable=False
     )
-    sprint_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("sprints.id"))
+    iteration_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("iterations.id"))
     result: Mapped[FitnessResult] = mapped_column(
         Enum(FitnessResult, name="fitness_result"), nullable=False
     )
@@ -323,29 +323,29 @@ class BoundedContext(BaseModel, SoftDeleteMixin):
 
 # ─── Loop module ──────────────────────────────────────────────────────────────
 
-class Sprint(BaseModel):
+class Iteration(BaseModel):
     """
     A single iteration of the AI-Agile loop.
     Progresses through five stages; each stage transition is a Checkpoint.
     """
-    __tablename__ = "sprints"
+    __tablename__ = "iterations"
 
     project_id: Mapped[str] = mapped_column(String(26), ForeignKey("projects.id"), nullable=False)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     goal: Mapped[str | None] = mapped_column(Text)
-    current_stage: Mapped[SprintStage] = mapped_column(
-        Enum(SprintStage, name="sprint_stage"),
+    current_stage: Mapped[IterationStage] = mapped_column(
+        Enum(IterationStage, name="iteration_stage"),
         nullable=False,
-        default=SprintStage.DEFINE,
+        default=IterationStage.DEFINE,
     )
-    status: Mapped[SprintStatus] = mapped_column(
-        Enum(SprintStatus, name="sprint_status"),
+    status: Mapped[IterationStatus] = mapped_column(
+        Enum(IterationStatus, name="iteration_status"),
         nullable=False,
-        default=SprintStatus.ACTIVE,
+        default=IterationStatus.ACTIVE,
     )
-    # Specs in scope for this sprint
+    # Specs in scope for this iteration
     spec_ids: Mapped[list] = mapped_column(JSON, default=list)
-    # ADRs to inject into AI context for this sprint
+    # ADRs to inject into AI context for this iteration
     active_adr_ids: Mapped[list] = mapped_column(JSON, default=list)
     # Bounded context scope
     bounded_context_id: Mapped[str | None] = mapped_column(
@@ -359,30 +359,30 @@ class Sprint(BaseModel):
     )
     adr_learnings: Mapped[list] = mapped_column(
         JSON, default=list,
-        comment="Architecture constraints to add or update after this sprint"
+        comment="Architecture constraints to add or update after this iteration"
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    project: Mapped["Project"] = relationship(back_populates="sprints")
+    project: Mapped["Project"] = relationship(back_populates="iterations")
     checkpoints: Mapped[list["Checkpoint"]] = relationship(
-        back_populates="sprint", order_by="Checkpoint.created_at"
+        back_populates="iterations", order_by="Checkpoint.created_at"
     )
     fitness_results: Mapped[list["FitnessFunctionResult"]] = relationship(
-        foreign_keys="FitnessFunctionResult.sprint_id"
+        foreign_keys="FitnessFunctionResult.iteration_id"
     )
 
 
 class Checkpoint(BaseModel):
     """
-    A human decision gate within a sprint stage transition.
-    Structurally enforced — the sprint cannot advance to the next stage
+    A human decision gate within an iteration stage transition.
+    Structurally enforced — the iteration cannot advance to the next stage
     until the required checkpoint is resolved.
     """
     __tablename__ = "checkpoints"
 
-    sprint_id: Mapped[str] = mapped_column(String(26), ForeignKey("sprints.id"), nullable=False)
-    stage: Mapped[SprintStage] = mapped_column(
-        Enum(SprintStage, name="sprint_stage_cp"), nullable=False
+    iteration_id: Mapped[str] = mapped_column(String(26), ForeignKey("iterations.id"), nullable=False)
+    stage: Mapped[IterationStage] = mapped_column(
+        Enum(IterationStage, name="iteration_stage_cp"), nullable=False
     )
     title: Mapped[str] = mapped_column(String(300), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
@@ -401,7 +401,7 @@ class Checkpoint(BaseModel):
     # Skip reason — required when is_required=True and status=SKIPPED
     skip_reason: Mapped[str | None] = mapped_column(Text)
 
-    sprint: Mapped["Sprint"] = relationship(back_populates="checkpoints")
+    iterations: Mapped["Iteration"] = relationship(back_populates="checkpoints")
 
 
 # ─── Telemetry module ─────────────────────────────────────────────────────────
@@ -414,10 +414,10 @@ class TelemetryEvent(BaseModel):
     __tablename__ = "telemetry_events"
 
     project_id: Mapped[str] = mapped_column(String(26), ForeignKey("projects.id"), nullable=False)
-    sprint_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("sprints.id"))
+    iteration_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("iterations.id"))
     event_type: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     # Examples: spec.created, spec.rework_detected, checkpoint.approved,
-    #           fitness.failed, stage.advanced, sprint.completed
+    #           fitness.failed, stage.advanced, iteration.completed
     payload: Mapped[dict] = mapped_column(JSON, default=dict)
     actor_id: Mapped[str | None] = mapped_column(String(26), ForeignKey("users.id"))
     source: Mapped[str | None] = mapped_column(
@@ -428,13 +428,13 @@ class TelemetryEvent(BaseModel):
 class LoopMetric(BaseModel):
     """
     Aggregated loop health snapshot — computed from TelemetryEvents.
-    One row per sprint, updated incrementally as events arrive.
+    One row per iteration, updated incrementally as events arrive.
     """
     __tablename__ = "loop_metrics"
 
     project_id: Mapped[str] = mapped_column(String(26), ForeignKey("projects.id"), nullable=False)
-    sprint_id: Mapped[str] = mapped_column(
-        String(26), ForeignKey("sprints.id"), nullable=False, unique=True
+    iteration_id: Mapped[str] = mapped_column(
+        String(26), ForeignKey("iterations.id"), nullable=False, unique=True
     )
     # The four key health indicators from the blog series
     spec_rework_count: Mapped[int] = mapped_column(Integer, default=0)

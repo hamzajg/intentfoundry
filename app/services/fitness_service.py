@@ -43,7 +43,7 @@ class FitnessService:
         self,
         project_id: str,
         function_ids: list[str] | None,
-        sprint_id: str | None,
+        iteration_id: str | None,
         triggered_by: str = "api",
     ) -> FitnessRunResponse:
         """
@@ -64,7 +64,7 @@ class FitnessService:
         if not functions:
             return FitnessRunResponse(
                 project_id=project_id,
-                sprint_id=sprint_id,
+                iteration_id=iteration_id,
                 results=[],
                 passed=0,
                 failed=0,
@@ -75,7 +75,7 @@ class FitnessService:
 
         # Run all checks concurrently with timeout protection
         tasks = [
-            self._execute_with_timeout(fn, sprint_id, triggered_by)
+            self._execute_with_timeout(fn, iteration_id, triggered_by)
             for fn in functions
         ]
         results: list[FitnessRunResult] = await asyncio.gather(*tasks)
@@ -87,7 +87,7 @@ class FitnessService:
 
             db_result = FitnessFunctionResult(
                 function_id=fn.id,
-                sprint_id=sprint_id,
+                iteration_id=iteration_id,
                 result=run_result.result,
                 message=run_result.message,
                 details={**run_result.details, "duration_ms": run_result.duration_ms},
@@ -99,7 +99,7 @@ class FitnessService:
 
         return FitnessRunResponse(
             project_id=project_id,
-            sprint_id=sprint_id,
+            iteration_id=iteration_id,
             results=results,
             passed=sum(1 for r in results if r.result == FitnessResult.PASS),
             failed=sum(1 for r in results if r.result == FitnessResult.FAIL),
@@ -111,7 +111,7 @@ class FitnessService:
     async def _execute_with_timeout(
         self,
         fn: FitnessFunction,
-        sprint_id: str | None,
+        iteration_id: str | None,
         triggered_by: str,
     ) -> FitnessRunResult:
         timeout = fn.check_config.get("timeout_seconds", settings.fitness_check_timeout_seconds)

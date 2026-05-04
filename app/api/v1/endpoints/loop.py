@@ -1,5 +1,5 @@
 """
-Loop module API — sprint lifecycle management.
+Loop module API — iteration lifecycle management.
 Enforces the five-stage cycle with human decision checkpoints.
 """
 from datetime import UTC, datetime
@@ -13,78 +13,78 @@ from app.models.domain import (
     Checkpoint,
     CheckpointStatus,
     Project,
-    Sprint,
-    SprintStage,
-    SprintStatus,
+    Iteration,
+    IterationStage,
+    IterationStatus,
 )
 from app.schemas.schemas import (
     CheckpointCreate,
     CheckpointOut,
     CheckpointResolve,
-    SprintCreate,
-    SprintOut,
-    SprintReflectionUpdate,
-    SprintUpdate,
+    IterationCreate,
+    IterationOut,
+    IterationReflectionUpdate,
+    IterationUpdate,
     StageAdvanceRequest,
 )
 from app.services.telemetry_service import TelemetryService
 
-router = APIRouter(prefix="/projects/{project_id}/sprints", tags=["loop"])
+router = APIRouter(prefix="/projects/{project_id}/iterations", tags=["loop"])
 
 # Stage progression order
 STAGE_ORDER = [
-    SprintStage.DEFINE,
-    SprintStage.GENERATE,
-    SprintStage.VALIDATE,
-    SprintStage.SHIP,
-    SprintStage.REFLECT,
+    IterationStage.DEFINE,
+    IterationStage.GENERATE,
+    IterationStage.VALIDATE,
+    IterationStage.SHIP,
+    IterationStage.REFLECT,
 ]
 
 
-@router.get("", response_model=list[SprintOut])
-async def list_sprints(
+@router.get("", response_model=list[IterationOut])
+async def list_iterations(
     project_id: str,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
-    sprint_status: SprintStatus | None = Query(default=None, alias="status"),
+    iteration_status: IterationStatus | None = Query(default=None, alias="status"),
 ):
-    query = select(Sprint).where(Sprint.project_id == project_id)
-    if sprint_status:
-        query = query.where(Sprint.status == sprint_status)
-    result = await db.execute(query.order_by(Sprint.created_at.desc()))
-    return [SprintOut.model_validate(s) for s in result.scalars().all()]
+    query = select(Iteration).where(Iteration.project_id == project_id)
+    if iteration_status:
+        query = query.where(Iteration.status == iteration_status)
+    result = await db.execute(query.order_by(Iteration.created_at.desc()))
+    return [IterationOut.model_validate(s) for s in result.scalars().all()]
 
 
-@router.post("", response_model=SprintOut, status_code=status.HTTP_201_CREATED)
-async def create_sprint(
+@router.post("", response_model=IterationOut, status_code=status.HTTP_201_CREATED)
+async def create_iteration(
     project_id: str,
-    data: SprintCreate,
+    data: IterationCreate,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
     """
-    Create a new sprint. Starts in DEFINE stage.
+    Create a new iteration. Starts in DEFINE stage.
     Automatically creates the first checkpoint (spec sign-off).
     """
-    sprint = Sprint(
+    iteration = Iteration(
         project_id=project_id,
         name=data.name,
         goal=data.goal,
         spec_ids=data.spec_ids,
         active_adr_ids=data.active_adr_ids,
         bounded_context_id=data.bounded_context_id,
-        current_stage=SprintStage.DEFINE,
-        status=SprintStatus.ACTIVE,
+        current_stage=IterationStage.DEFINE,
+        status=IterationStatus.ACTIVE,
     )
-    db.add(sprint)
+    db.add(iteration)
     await db.flush()
 
     # Auto-create the initial Define stage checkpoint
     checkpoint = Checkpoint(
-        sprint_id=sprint.id,
-        stage=SprintStage.DEFINE,
+        iteration_id=iteration.id,
+        stage=IterationStage.DEFINE,
         title="Specification sign-off",
         description=(
             "Verify that all specs in scope are complete, unambiguous, "
@@ -96,82 +96,82 @@ async def create_sprint(
 
     await TelemetryService(db).emit(
         project_id=project_id,
-        event_type="sprint.created",
+        event_type="iteration.created",
         payload={
-            "sprint_id": sprint.id,
+            "iteration_id": iteration.id,
             "spec_count": len(data.spec_ids),
             "adr_count": len(data.active_adr_ids),
         },
         actor_id=current_user.id,
     )
     await db.flush()
-    return SprintOut.model_validate(sprint)
+    return IterationOut.model_validate(iteration)
 
 
-@router.get("/{sprint_id}", response_model=SprintOut)
-async def get_sprint(
+@router.get("/{iteration_id}", response_model=IterationOut)
+async def get_iteration(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    return SprintOut.model_validate(await _get_sprint_or_404(db, sprint_id, project_id))
+    return IterationOut.model_validate(await _get_iteration_or_404(db, iteration_id, project_id))
 
 
-@router.patch("/{sprint_id}", response_model=SprintOut)
-async def update_sprint(
+@router.patch("/{iteration_id}", response_model=IterationOut)
+async def update_iteration(
     project_id: str,
-    sprint_id: str,
-    data: SprintUpdate,
+    iteration_id: str,
+    data: IterationUpdate,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    sprint = await _get_sprint_or_404(db, sprint_id, project_id)
-    if sprint.status != SprintStatus.ACTIVE:
+    iteration = await _get_iteration_or_404(db, iteration_id, project_id)
+    if iteration.status != IterationStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Cannot update a completed or abandoned sprint",
+            detail="Cannot update a completed or abandoned iteration",
         )
     if data.name is not None:
-        sprint.name = data.name
+        iteration.name = data.name
     if data.goal is not None:
-        sprint.goal = data.goal
+        iteration.goal = data.goal
     if data.spec_ids is not None:
-        sprint.spec_ids = data.spec_ids
+        iteration.spec_ids = data.spec_ids
     if data.active_adr_ids is not None:
-        sprint.active_adr_ids = data.active_adr_ids
+        iteration.active_adr_ids = data.active_adr_ids
     await db.flush()
-    return SprintOut.model_validate(sprint)
+    return IterationOut.model_validate(iteration)
 
 
-@router.post("/{sprint_id}/advance", response_model=SprintOut)
+@router.post("/{iteration_id}/advance", response_model=IterationOut)
 async def advance_stage(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     request: StageAdvanceRequest,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
     """
-    Advance the sprint to the next stage.
+    Advance the iteration to the next stage.
 
     Enforces checkpoint completion before advancing — unless force=True,
     which requires a written reason and is logged as a governance exception.
-    If the current stage is REFLECT, completes the sprint.
+    If the current stage is REFLECT, completes the iteration.
     """
-    sprint = await _get_sprint_or_404(db, sprint_id, project_id)
+    iteration = await _get_iteration_or_404(db, iteration_id, project_id)
 
-    if sprint.status != SprintStatus.ACTIVE:
+    if iteration.status != IterationStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=f"Sprint is {sprint.status.value}, not active",
+            detail=f"Iteration is {iteration.status.value}, not active",
         )
 
     # Check for blocking pending checkpoints
-    pending = await _get_pending_required_checkpoints(db, sprint_id, sprint.current_stage)
+    pending = await _get_pending_required_checkpoints(db, iteration_id, iteration.current_stage)
 
     if pending and not request.force:
         pending_titles = [c.title for c in pending]
@@ -197,60 +197,60 @@ async def advance_stage(
             cp.resolved_at = datetime.now(UTC)
         await TelemetryService(db).emit(
             project_id=project_id,
-            event_type="sprint.checkpoints_force_skipped",
+            event_type="iteration.checkpoints_force_skipped",
             payload={
-                "sprint_id": sprint_id,
-                "stage": sprint.current_stage.value,
+                "iteration_id": iteration_id,
+                "stage": iteration.current_stage.value,
                 "reason": request.force_reason,
                 "skipped_count": len(pending),
             },
             actor_id=current_user.id,
         )
 
-    current_idx = STAGE_ORDER.index(sprint.current_stage)
-    old_stage = sprint.current_stage
+    current_idx = STAGE_ORDER.index(iteration.current_stage)
+    old_stage = iteration.current_stage
 
     if current_idx == len(STAGE_ORDER) - 1:
-        # REFLECT → complete the sprint
-        sprint.status = SprintStatus.COMPLETED
-        sprint.completed_at = datetime.now(UTC)
+        # REFLECT → complete the iteration
+        iteration.status = IterationStatus.COMPLETED
+        iteration.completed_at = datetime.now(UTC)
         await TelemetryService(db).emit(
             project_id=project_id,
-            event_type="sprint.completed",
-            payload={"sprint_id": sprint_id},
+            event_type="iteration.completed",
+            payload={"iteration_id": iteration_id},
             actor_id=current_user.id,
         )
     else:
         next_stage = STAGE_ORDER[current_idx + 1]
-        sprint.current_stage = next_stage
+        iteration.current_stage = next_stage
 
         # Auto-create checkpoint for the new stage
         checkpoint_configs = {
-            SprintStage.GENERATE: (
+            IterationStage.GENERATE: (
                 "AI output review",
                 "Review AI-generated output against the spec. "
                 "Verify architectural constraints are respected.",
             ),
-            SprintStage.VALIDATE: (
+            IterationStage.VALIDATE: (
                 "Fitness function gate",
                 "All fitness functions must pass. "
                 "Review test coverage against acceptance criteria.",
             ),
-            SprintStage.SHIP: (
+            IterationStage.SHIP: (
                 "Acceptance criteria sign-off",
                 "Confirm the output satisfies the acceptance criteria. "
                 "Human sign-off that the right thing was built.",
             ),
-            SprintStage.REFLECT: (
+            IterationStage.REFLECT: (
                 "Reflection completion",
                 "Document spec learnings and ADR updates "
-                "from this sprint before closing.",
+                "from this iteration before closing.",
             ),
         }
         if next_stage in checkpoint_configs:
             title, description = checkpoint_configs[next_stage]
             checkpoint = Checkpoint(
-                sprint_id=sprint_id,
+                iteration_id=iteration_id,
                 stage=next_stage,
                 title=title,
                 description=description,
@@ -260,9 +260,9 @@ async def advance_stage(
 
         await TelemetryService(db).emit(
             project_id=project_id,
-            event_type="sprint.stage_advanced",
+            event_type="iteration.stage_advanced",
             payload={
-                "sprint_id": sprint_id,
+                "iteration_id": iteration_id,
                 "from_stage": old_stage.value,
                 "to_stage": next_stage.value,
                 "notes": request.notes,
@@ -271,102 +271,102 @@ async def advance_stage(
         )
 
     await db.flush()
-    return SprintOut.model_validate(sprint)
+    return IterationOut.model_validate(iteration)
 
 
-@router.post("/{sprint_id}/abandon", response_model=SprintOut)
-async def abandon_sprint(
+@router.post("/{iteration_id}/abandon", response_model=IterationOut)
+async def abandon_iteration(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    sprint = await _get_sprint_or_404(db, sprint_id, project_id)
-    if sprint.status != SprintStatus.ACTIVE:
+    iteration = await _get_iteration_or_404(db, iteration_id, project_id)
+    if iteration.status != IterationStatus.ACTIVE:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="Sprint is not active",
+            detail="Iteration is not active",
         )
-    sprint.status = SprintStatus.ABANDONED
+    iteration.status = IterationStatus.ABANDONED
     await TelemetryService(db).emit(
         project_id=project_id,
-        event_type="sprint.abandoned",
-        payload={"sprint_id": sprint_id, "stage": sprint.current_stage.value},
+        event_type="iteration.abandoned",
+        payload={"iteration_id": iteration_id, "stage": iteration.current_stage.value},
         actor_id=current_user.id,
     )
-    return SprintOut.model_validate(sprint)
+    return IterationOut.model_validate(iteration)
 
 
-@router.put("/{sprint_id}/reflection", response_model=SprintOut)
+@router.put("/{iteration_id}/reflection", response_model=IterationOut)
 async def update_reflection(
     project_id: str,
-    sprint_id: str,
-    data: SprintReflectionUpdate,
+    iteration_id: str,
+    data: IterationReflectionUpdate,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
     """Stage 5 — update reflection notes and learnings."""
-    sprint = await _get_sprint_or_404(db, sprint_id, project_id)
-    if sprint.current_stage != SprintStage.REFLECT and sprint.status != SprintStatus.COMPLETED:
+    iteration = await _get_iteration_or_404(db, iteration_id, project_id)
+    if iteration.current_stage != IterationStage.REFLECT and iteration.status != IterationStatus.COMPLETED:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Reflection is only available in the Reflect stage",
         )
-    sprint.reflection_notes = data.reflection_notes
-    sprint.spec_learnings = data.spec_learnings
-    sprint.adr_learnings = data.adr_learnings
+    iteration.reflection_notes = data.reflection_notes
+    iteration.spec_learnings = data.spec_learnings
+    iteration.adr_learnings = data.adr_learnings
 
     await TelemetryService(db).emit(
         project_id=project_id,
-        event_type="sprint.reflection_updated",
+        event_type="iteration.reflection_updated",
         payload={
-            "sprint_id": sprint_id,
+            "iteration_id": iteration_id,
             "spec_learnings_count": len(data.spec_learnings),
             "adr_learnings_count": len(data.adr_learnings),
         },
         actor_id=current_user.id,
     )
     await db.flush()
-    return SprintOut.model_validate(sprint)
+    return IterationOut.model_validate(iteration)
 
 
 # ─── Checkpoint endpoints ─────────────────────────────────────────────────────
 
-@router.get("/{sprint_id}/checkpoints", response_model=list[CheckpointOut])
+@router.get("/{iteration_id}/checkpoints", response_model=list[CheckpointOut])
 async def list_checkpoints(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    await _get_sprint_or_404(db, sprint_id, project_id)
+    await _get_iteration_or_404(db, iteration_id, project_id)
     result = await db.execute(
         select(Checkpoint)
-        .where(Checkpoint.sprint_id == sprint_id)
+        .where(Checkpoint.iteration_id == iteration_id)
         .order_by(Checkpoint.created_at.asc())
     )
     return [CheckpointOut.model_validate(c) for c in result.scalars().all()]
 
 
-@router.post("/{sprint_id}/checkpoints", response_model=CheckpointOut, status_code=201)
+@router.post("/{iteration_id}/checkpoints", response_model=CheckpointOut, status_code=201)
 async def create_checkpoint(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     data: CheckpointCreate,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    """Add a custom checkpoint to any stage of an active sprint."""
-    sprint = await _get_sprint_or_404(db, sprint_id, project_id)
-    if sprint.status != SprintStatus.ACTIVE:
-        raise HTTPException(status_code=409, detail="Sprint is not active")
+    """Add a custom checkpoint to any stage of an active iteration."""
+    iteration = await _get_iteration_or_404(db, iteration_id, project_id)
+    if iteration.status != IterationStatus.ACTIVE:
+        raise HTTPException(status_code=409, detail="Iteration is not active")
 
     checkpoint = Checkpoint(
-        sprint_id=sprint_id,
+        iteration_id=iteration_id,
         stage=data.stage,
         title=data.title,
         description=data.description,
@@ -377,10 +377,10 @@ async def create_checkpoint(
     return CheckpointOut.model_validate(checkpoint)
 
 
-@router.post("/{sprint_id}/checkpoints/{checkpoint_id}/resolve", response_model=CheckpointOut)
+@router.post("/{iteration_id}/checkpoints/{checkpoint_id}/resolve", response_model=CheckpointOut)
 async def resolve_checkpoint(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     checkpoint_id: str,
     data: CheckpointResolve,
     db: DB,
@@ -388,12 +388,12 @@ async def resolve_checkpoint(
     project: Project = Depends(get_project_or_404),
 ):
     """Approve, reject, or skip a checkpoint. Requires human sign-off."""
-    await _get_sprint_or_404(db, sprint_id, project_id)
+    await _get_iteration_or_404(db, iteration_id, project_id)
 
     result = await db.execute(
         select(Checkpoint).where(
             Checkpoint.id == checkpoint_id,
-            Checkpoint.sprint_id == sprint_id,
+            Checkpoint.iteration_id == iteration_id,
         )
     )
     checkpoint = result.scalar_one_or_none()
@@ -421,7 +421,7 @@ async def resolve_checkpoint(
         project_id=project_id,
         event_type="checkpoint.resolved",
         payload={
-            "sprint_id": sprint_id,
+            "iteration_id": iteration_id,
             "checkpoint_id": checkpoint_id,
             "status": data.status.value,
             "stage": checkpoint.stage.value,
@@ -434,22 +434,22 @@ async def resolve_checkpoint(
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
-async def _get_sprint_or_404(db: AsyncSession, sprint_id: str, project_id: str) -> Sprint:
+async def _get_iteration_or_404(db: AsyncSession, iteration_id: str, project_id: str) -> Iteration:
     result = await db.execute(
-        select(Sprint).where(Sprint.id == sprint_id, Sprint.project_id == project_id)
+        select(Iteration).where(Iteration.id == iteration_id, Iteration.project_id == project_id)
     )
-    sprint = result.scalar_one_or_none()
-    if not sprint:
-        raise HTTPException(status_code=404, detail="Sprint not found")
-    return sprint
+    iteration = result.scalar_one_or_none()
+    if not iteration:
+        raise HTTPException(status_code=404, detail="Iteration not found")
+    return iteration
 
 
 async def _get_pending_required_checkpoints(
-    db: AsyncSession, sprint_id: str, stage: SprintStage
+    db: AsyncSession, iteration_id: str, stage: IterationStage
 ) -> list[Checkpoint]:
     result = await db.execute(
         select(Checkpoint).where(
-            Checkpoint.sprint_id == sprint_id,
+            Checkpoint.iteration_id == iteration_id,
             Checkpoint.stage == stage,
             Checkpoint.status == CheckpointStatus.PENDING,
             Checkpoint.is_required.is_(True),

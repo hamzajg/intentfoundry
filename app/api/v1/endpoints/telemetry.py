@@ -12,7 +12,7 @@ from sqlalchemy import desc, func, select
 
 from app.api.v1.deps import CurrentUser, DB, get_project_or_404
 from app.core.config import get_settings
-from app.models.domain import LoopMetric, Project, Sprint, SprintStatus, TelemetryEvent
+from app.models.domain import LoopMetric, Project, Iteration, IterationStatus, TelemetryEvent
 from app.schemas.schemas import LoopMetricOut, ProjectHealthOut, TelemetryEventOut
 from app.services.telemetry_service import TelemetryService
 
@@ -27,7 +27,7 @@ async def list_events(
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
     event_type: str | None = None,
-    sprint_id: str | None = None,
+    iteration_id: str | None = None,
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
 ):
@@ -35,8 +35,8 @@ async def list_events(
     query = select(TelemetryEvent).where(TelemetryEvent.project_id == project_id)
     if event_type:
         query = query.where(TelemetryEvent.event_type == event_type)
-    if sprint_id:
-        query = query.where(TelemetryEvent.sprint_id == sprint_id)
+    if iteration_id:
+        query = query.where(TelemetryEvent.iteration_id == iteration_id)
 
     result = await db.execute(
         query.order_by(TelemetryEvent.created_at.desc()).offset(offset).limit(limit)
@@ -52,7 +52,7 @@ async def list_loop_metrics(
     project: Project = Depends(get_project_or_404),
     limit: int = Query(default=10, ge=1, le=50),
 ):
-    """Loop health metrics per sprint — most recent first."""
+    """Loop health metrics per iteration — most recent first."""
     result = await db.execute(
         select(LoopMetric)
         .where(LoopMetric.project_id == project_id)
@@ -62,41 +62,41 @@ async def list_loop_metrics(
     return [LoopMetricOut.model_validate(m) for m in result.scalars().all()]
 
 
-@router.get("/metrics/{sprint_id}", response_model=LoopMetricOut)
-async def get_sprint_metrics(
+@router.get("/metrics/{iteration_id}", response_model=LoopMetricOut)
+async def get_iteration_metrics(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    """Loop health metrics for a specific sprint."""
+    """Loop health metrics for a specific iteration."""
     result = await db.execute(
         select(LoopMetric).where(
             LoopMetric.project_id == project_id,
-            LoopMetric.sprint_id == sprint_id,
+            LoopMetric.iteration_id == iteration_id,
         )
     )
     metric = result.scalar_one_or_none()
     if not metric:
         # Compute on demand if not yet cached
         svc = TelemetryService(db)
-        metric = await svc.compute_loop_metrics(project_id=project_id, sprint_id=sprint_id)
+        metric = await svc.compute_loop_metrics(project_id=project_id, iteration_id=iteration_id)
     return LoopMetricOut.model_validate(metric)
 
 
-@router.post("/metrics/{sprint_id}/recompute", response_model=LoopMetricOut)
-async def recompute_sprint_metrics(
+@router.post("/metrics/{iteration_id}/recompute", response_model=LoopMetricOut)
+async def recompute_iteration_metrics(
     project_id: str,
-    sprint_id: str,
+    iteration_id: str,
     db: DB,
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    """Force recomputation of loop health metrics for a sprint."""
+    """Force recomputation of loop health metrics for a iteration."""
     svc = TelemetryService(db)
     metric = await svc.compute_loop_metrics(
-        project_id=project_id, sprint_id=sprint_id, force=True
+        project_id=project_id, iteration_id=iteration_id, force=True
     )
     return LoopMetricOut.model_validate(metric)
 
@@ -109,7 +109,7 @@ async def get_project_health(
     project: Project = Depends(get_project_or_404),
 ):
     """
-    Aggregated loop health summary across all sprints.
+    Aggregated loop health summary across all iterations.
     The four key health indicators from the IntentFoundry model:
       1. Spec rework count
       2. Architecture drift count
@@ -131,7 +131,7 @@ async def stream_telemetry(
     Server-Sent Events stream for real-time loop telemetry.
 
     Clients subscribe to this endpoint and receive events as they are emitted:
-      - sprint.stage_advanced
+      - iteration.stage_advanced
       - checkpoint.resolved
       - fitness.failed / fitness.passed
       - architecture.drift_detected
@@ -195,7 +195,7 @@ async def stream_telemetry(
                             "event_id": event.id,
                             "event_type": event.event_type,
                             "payload": event.payload,
-                            "sprint_id": event.sprint_id,
+                            "iteration_id": event.iteration_id,
                             "timestamp": event.created_at.isoformat(),
                         },
                     )

@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { telemetryApi } from '../api/client';
-import { useEventStore, useProjectStore, useSprintStore } from '../stores';
+import { useEventStore, useProjectStore, useIterationStore } from '../stores';
 import { Card, Spinner } from '../components/ui';
 import type { LoopMetricOut, ProjectHealthOut, TelemetryEventOut } from '../api/client';
 
 export function Telemetry() {
   const { activeProject } = useProjectStore();
-  const { activeSprint } = useSprintStore();
+  const { activeIteration } = useIterationStore();
   const { events, setEvents, sseConnected, setSseConnected } = useEventStore();
   const [health, setHealth] = useState<ProjectHealthOut | null>(null);
   const [metrics, setMetrics] = useState<LoopMetricOut | null>(null);
@@ -30,9 +30,9 @@ export function Telemetry() {
       const [healthRes, eventsRes] = await Promise.all([telemetryApi.projectHealth(activeProject.id), telemetryApi.events(activeProject.id, { limit: 50 })]);
       setHealth(healthRes.data);
       setEvents(eventsRes.data);
-      if (activeSprint) {
+      if (activeIteration) {
         try {
-          const metricsRes = await telemetryApi.metrics(activeProject.id, activeSprint.id);
+          const metricsRes = await telemetryApi.metrics(activeProject.id, activeIteration.id);
           setMetrics(metricsRes.data);
         } catch {
           setMetrics(null);
@@ -96,12 +96,12 @@ export function Telemetry() {
       {health && (
         <div className="grid gap-4 md:grid-cols-4 mb-8">
           <Card className="p-4">
-            <div className="text-xs font-mono text-foundry-400 uppercase">Total Sprints</div>
-            <div className="mt-1 text-2xl font-semibold text-foundry-100">{health.total_sprints}</div>
+            <div className="text-xs font-mono text-foundry-400 uppercase">Total Iterations</div>
+            <div className="mt-1 text-2xl font-semibold text-foundry-100">{health.total_iterations}</div>
           </Card>
           <Card className="p-4">
             <div className="text-xs font-mono text-foundry-400 uppercase">Completed</div>
-            <div className="mt-1 text-2xl font-semibold text-emerald-400">{health.completed_sprints}</div>
+            <div className="mt-1 text-2xl font-semibold text-emerald-400">{health.completed_iterations}</div>
           </Card>
           <Card className="p-4">
             <div className="text-xs font-mono text-foundry-400 uppercase">Loop Health</div>
@@ -120,7 +120,7 @@ export function Telemetry() {
 
       {metrics && (
         <Card className="p-6 mb-8">
-          <h2 className="text-lg font-medium text-foundry-100 mb-4">Sprint Metrics</h2>
+          <h2 className="text-lg font-medium text-foundry-100 mb-4">Iteration Metrics</h2>
           <div className="grid gap-4 md:grid-cols-3">
             <div className="p-4 bg-foundry-800 rounded">
               <div className="text-xs font-mono text-foundry-400 uppercase">Spec Rework</div>

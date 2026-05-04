@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
 import { telemetryApi, loopApi } from '../api/client';
-import { useProjectStore, useSprintStore } from '../stores';
+import { useProjectStore, useIterationStore } from '../stores';
 import { Badge, Card, Spinner } from '../components/ui';
 import type { ProjectHealthOut, TelemetryEventOut } from '../api/client';
 
 export function Overview() {
   const { activeProject } = useProjectStore();
-  const { activeSprint, setActiveSprint } = useSprintStore();
+  const { activeIteration, setActiveIteration } = useIterationStore();
   const [health, setHealth] = useState<ProjectHealthOut | null>(null);
   const [recentEvents, setRecentEvents] = useState<TelemetryEventOut[]>([]);
   const [loading, setLoading] = useState(true);
@@ -25,9 +25,9 @@ export function Overview() {
       setHealth(healthRes.data);
       setRecentEvents(eventsRes.data);
       if (activeProject) {
-        const sprintsRes = await loopApi.list(activeProject.id);
-        const active = sprintsRes.data.find((s) => s.status === 'active');
-        setActiveSprint(active || null);
+        const iterationsRes = await loopApi.list(activeProject.id);
+        const active = iterationsRes.data.find((s) => s.status === 'active');
+        setActiveIteration(active || null);
       }
     } catch {
     } finally {
@@ -70,12 +70,12 @@ export function Overview() {
 
       <div className="grid gap-4 md:grid-cols-4 mb-8">
         <Card className="p-4">
-          <div className="text-xs font-mono text-foundry-400 uppercase">Total Sprints</div>
-          <div className="mt-1 text-2xl font-semibold text-foundry-100">{String(health?.total_sprints || 0)}</div>
+          <div className="text-xs font-mono text-foundry-400 uppercase">Total Iterations</div>
+          <div className="mt-1 text-2xl font-semibold text-foundry-100">{String(health?.total_iterations || 0)}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs font-mono text-foundry-400 uppercase">Completed</div>
-          <div className="mt-1 text-2xl font-semibold text-emerald-400">{String(health?.completed_sprints || 0)}</div>
+          <div className="mt-1 text-2xl font-semibold text-emerald-400">{String(health?.completed_iterations || 0)}</div>
         </Card>
         <Card className="p-4">
           <div className="text-xs font-mono text-foundry-400 uppercase">Loop Health</div>
@@ -87,19 +87,19 @@ export function Overview() {
         </Card>
       </div>
 
-      {activeSprint && (
+      {activeIteration && (
         <Card className="p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-medium text-foundry-100">Active Sprint</h2>
-            <Badge variant={stageColors[activeSprint.current_stage]}>{activeSprint.current_stage.toUpperCase()}</Badge>
+            <h2 className="text-lg font-medium text-foundry-100">Active Iteration</h2>
+            <Badge variant={stageColors[activeIteration.current_stage]}>{activeIteration.current_stage.toUpperCase()}</Badge>
           </div>
-          <div className="text-xl font-semibold text-foundry-50">{activeSprint.name}</div>
-          {activeSprint.goal && <p className="mt-1 text-foundry-400">{activeSprint.goal}</p>}
+          <div className="text-xl font-semibold text-foundry-50">{activeIteration.name}</div>
+          {activeIteration.goal && <p className="mt-1 text-foundry-400">{activeIteration.goal}</p>}
           <div className="mt-4 flex items-center gap-2">
             {['define', 'generate', 'validate', 'ship', 'reflect'].map((stage, idx) => {
               const stages = ['define', 'generate', 'validate', 'ship', 'reflect'];
-              const currentIdx = stages.indexOf(activeSprint.current_stage);
-              const isActive = stage === activeSprint.current_stage;
+              const currentIdx = stages.indexOf(activeIteration.current_stage);
+              const isActive = stage === activeIteration.current_stage;
               const isPast = idx < currentIdx;
               return (
                 <div key={stage} className="flex items-center">

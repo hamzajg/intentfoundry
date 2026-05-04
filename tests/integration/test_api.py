@@ -420,14 +420,14 @@ class TestArchitecture:
 # ─── Loop module ──────────────────────────────────────────────────────────────
 
 class TestLoop:
-    async def test_create_sprint(
+    async def test_create_iteration(
         self, client: AsyncClient, auth_headers: dict, test_project: dict
     ):
         pid = test_project["id"]
         r = await client.post(
-            f"/api/v1/projects/{pid}/sprints",
+            f"/api/v1/projects/{pid}/iterations",
             json={
-                "name": "Sprint 1",
+                "name": "Iteration 1",
                 "goal": "Implement user authentication",
                 "spec_ids": [],
                 "active_adr_ids": [],
@@ -439,18 +439,18 @@ class TestLoop:
         assert data["current_stage"] == "define"
         assert data["status"] == "active"
 
-    async def test_sprint_auto_creates_checkpoint(
+    async def test_iteration_auto_creates_checkpoint(
         self, client: AsyncClient, auth_headers: dict, test_project: dict
     ):
         pid = test_project["id"]
         sr = await client.post(
-            f"/api/v1/projects/{pid}/sprints",
-            json={"name": "Sprint checkpoint test"},
+            f"/api/v1/projects/{pid}/iterations",
+            json={"name": "Iteration checkpoint test"},
             headers=auth_headers,
         )
-        sprint_id = sr.json()["id"]
+        iteration_id = sr.json()["id"]
         r = await client.get(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/checkpoints",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/checkpoints",
             headers=auth_headers,
         )
         assert r.status_code == 200
@@ -465,39 +465,39 @@ class TestLoop:
     ):
         pid = test_project["id"]
         sr = await client.post(
-            f"/api/v1/projects/{pid}/sprints",
-            json={"name": "Blocked sprint"},
+            f"/api/v1/projects/{pid}/iterations",
+            json={"name": "Blocked iteration"},
             headers=auth_headers,
         )
-        sprint_id = sr.json()["id"]
+        iteration_id = sr.json()["id"]
         # Try to advance without resolving checkpoint
         r = await client.post(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/advance",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/advance",
             json={},
             headers=auth_headers,
         )
         assert r.status_code == 409
         assert "pending_checkpoints" in r.json()["detail"]
 
-    async def test_full_sprint_lifecycle(
+    async def test_full_iteration_lifecycle(
         self, client: AsyncClient, auth_headers: dict, test_project: dict
     ):
         pid = test_project["id"]
         sr = await client.post(
-            f"/api/v1/projects/{pid}/sprints",
-            json={"name": "Full lifecycle sprint"},
+            f"/api/v1/projects/{pid}/iterations",
+            json={"name": "Full lifecycle iteration"},
             headers=auth_headers,
         )
-        sprint_id = sr.json()["id"]
+        iteration_id = sr.json()["id"]
 
         # Get and resolve the define checkpoint
         cpr = await client.get(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/checkpoints",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/checkpoints",
             headers=auth_headers,
         )
         cp_id = cpr.json()[0]["id"]
         await client.post(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/checkpoints/{cp_id}/resolve",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/checkpoints/{cp_id}/resolve",
             json={"status": "approved", "resolution_notes": "Specs look good"},
             headers=auth_headers,
         )
@@ -506,7 +506,7 @@ class TestLoop:
         stages_to_advance_to = ["generate", "validate", "ship", "reflect"]
         for expected_stage in stages_to_advance_to:
             r = await client.post(
-                f"/api/v1/projects/{pid}/sprints/{sprint_id}/advance",
+                f"/api/v1/projects/{pid}/iterations/{iteration_id}/advance",
                 json={},
                 headers=auth_headers,
             )
@@ -515,20 +515,20 @@ class TestLoop:
 
             # Resolve the new auto-created checkpoint if present
             cpr2 = await client.get(
-                f"/api/v1/projects/{pid}/sprints/{sprint_id}/checkpoints",
+                f"/api/v1/projects/{pid}/iterations/{iteration_id}/checkpoints",
                 headers=auth_headers,
             )
             for cp in cpr2.json():
                 if cp["status"] == "pending":
                     await client.post(
-                        f"/api/v1/projects/{pid}/sprints/{sprint_id}/checkpoints/{cp['id']}/resolve",
+                        f"/api/v1/projects/{pid}/iterations/{iteration_id}/checkpoints/{cp['id']}/resolve",
                         json={"status": "approved"},
                         headers=auth_headers,
                     )
 
-        # Final advance from REFLECT → completes the sprint
+        # Final advance from REFLECT → completes the iteration
         r_complete = await client.post(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/advance",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/advance",
             json={},
             headers=auth_headers,
         )
@@ -540,21 +540,21 @@ class TestLoop:
     ):
         pid = test_project["id"]
         sr = await client.post(
-            f"/api/v1/projects/{pid}/sprints",
-            json={"name": "Force test sprint"},
+            f"/api/v1/projects/{pid}/iterations",
+            json={"name": "Force test iteration"},
             headers=auth_headers,
         )
-        sprint_id = sr.json()["id"]
+        iteration_id = sr.json()["id"]
         # Force without reason
         r = await client.post(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/advance",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/advance",
             json={"force": True},
             headers=auth_headers,
         )
         assert r.status_code == 422
         # Force with reason
         r2 = await client.post(
-            f"/api/v1/projects/{pid}/sprints/{sprint_id}/advance",
+            f"/api/v1/projects/{pid}/iterations/{iteration_id}/advance",
             json={"force": True, "force_reason": "Emergency hotfix — deadline today"},
             headers=auth_headers,
         )
@@ -597,7 +597,7 @@ class TestTelemetry:
         )
         assert r.status_code == 200
         data = r.json()
-        assert "total_sprints" in data
+        assert "total_iterations" in data
         assert "reflect_stage_completion_rate" in data
         assert "recent_fitness_pass_rate" in data
 
