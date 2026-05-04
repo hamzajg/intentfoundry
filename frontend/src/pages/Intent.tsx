@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useApiToast, Modal, Textarea, Input, Select, Badge, Button, Card, EmptyState, Spinner } from '../components/ui';
+import { useApiToast, Drawer, Textarea, Input, Select, Badge, Button, Card, EmptyState, Spinner } from '../components/ui';
 import { specApi } from '../api/client';
 import { useProjectStore } from '../stores';
 import type { SpecOut, SpecVersionOut } from '../api/client';
@@ -250,90 +250,90 @@ export function Intent() {
         </>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Spec" size="lg">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <Input label="Title" value={newSpec.title} onChange={(e) => setNewSpec({ ...newSpec, title: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') })} placeholder="Spec title" required />
-          <Input label="Slug" value={newSpec.slug} onChange={(e) => setNewSpec({ ...newSpec, slug: e.target.value })} placeholder="spec-slug" required />
-          <Select label="Format" value={newSpec.format} onChange={(e) => setNewSpec({ ...newSpec, format: e.target.value })}>
-            {FORMAT_OPTIONS.map((f) => (
-              <option key={f.value} value={f.value}>{f.label}</option>
-            ))}
-          </Select>
-          <Input label="Tags (comma-separated)" value={newSpec.tags.join(', ')} onChange={(e) => setNewSpec({ ...newSpec, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="tag1, tag2" />
-          <Input label="Bounded Context ID" value={newSpec.bounded_context_id} onChange={(e) => setNewSpec({ ...newSpec, bounded_context_id: e.target.value })} placeholder="context-id" />
-          <Input label="Linked ADR IDs (comma-separated)" value={newSpec.linked_adr_ids.join(', ')} onChange={(e) => setNewSpec({ ...newSpec, linked_adr_ids: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="adr-id-1, adr-id-2" />
-          <Textarea label="Change Summary" value={newSpec.change_summary} onChange={(e) => setNewSpec({ ...newSpec, change_summary: e.target.value })} placeholder="Summary of changes" rows={2} />
-          <Textarea label="Content (JSON)" value={JSON.stringify(newSpec.content, null, 2)} onChange={(e) => { try { setNewSpec({ ...newSpec, content: JSON.parse(e.target.value) }); } catch {} }} className="font-mono text-xs" rows={10} />
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button type="submit" loading={createMutation.isPending}>Create</Button>
-          </div>
-        </form>
-      </Modal>
+       <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="Create Spec" size="lg">
+         <form onSubmit={handleCreate} className="space-y-4">
+           <Input label="Title" value={newSpec.title} onChange={(e) => setNewSpec({ ...newSpec, title: e.target.value, slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') })} placeholder="Spec title" required />
+           <Input label="Slug" value={newSpec.slug} onChange={(e) => setNewSpec({ ...newSpec, slug: e.target.value })} placeholder="spec-slug" required />
+           <Select label="Format" value={newSpec.format} onChange={(e) => setNewSpec({ ...newSpec, format: e.target.value })}>
+             {FORMAT_OPTIONS.map((f) => (
+               <option key={f.value} value={f.value}>{f.label}</option>
+             ))}
+           </Select>
+           <Input label="Tags (comma-separated)" value={newSpec.tags.join(', ')} onChange={(e) => setNewSpec({ ...newSpec, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="tag1, tag2" />
+           <Input label="Bounded Context ID" value={newSpec.bounded_context_id} onChange={(e) => setNewSpec({ ...newSpec, bounded_context_id: e.target.value })} placeholder="context-id" />
+           <Input label="Linked ADR IDs (comma-separated)" value={newSpec.linked_adr_ids.join(', ')} onChange={(e) => setNewSpec({ ...newSpec, linked_adr_ids: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="adr-id-1, adr-id-2" />
+           <Textarea label="Change Summary" value={newSpec.change_summary} onChange={(e) => setNewSpec({ ...newSpec, change_summary: e.target.value })} placeholder="Summary of changes" rows={2} />
+           <Textarea label="Content (JSON)" value={JSON.stringify(newSpec.content, null, 2)} onChange={(e) => { try { setNewSpec({ ...newSpec, content: JSON.parse(e.target.value) }); } catch {} }} className="font-mono text-xs" rows={10} />
+           <div className="flex justify-end gap-3 pt-4">
+             <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
+             <Button type="submit" loading={createMutation.isPending}>Create</Button>
+           </div>
+         </form>
+       </Drawer>
 
-      <Modal open={!!showEdit} onClose={() => setShowEdit(null)} title="Edit Spec" size="lg">
-        {showEdit && (
-          <form onSubmit={handleUpdate} className="space-y-4">
-            <Input label="Title" value={showEdit.title} onChange={(e) => setShowEdit({ ...showEdit, title: e.target.value })} />
-            <Select label="Status" value={showEdit.status} onChange={(e) => setShowEdit({ ...showEdit, status: e.target.value as SpecOut['status'] })}>
-              {STATUS_OPTIONS.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </Select>
-            <Select label="Format" value={showEdit.format} onChange={(e) => setShowEdit({ ...showEdit, format: e.target.value as SpecOut['format'] })}>
-              {FORMAT_OPTIONS.map((f) => (
-                <option key={f.value} value={f.value}>{f.label}</option>
-              ))}
-            </Select>
-            <Input label="Tags (comma-separated)" value={showEdit.tags?.join(', ') || ''} onChange={(e) => setShowEdit({ ...showEdit, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="tag1, tag2" />
-            <Input label="Bounded Context ID" value={showEdit.bounded_context_id || ''} onChange={(e) => setShowEdit({ ...showEdit, bounded_context_id: e.target.value || null })} placeholder="context-id" />
-            <Input label="Linked ADR IDs (comma-separated)" value={showEdit.linked_adr_ids?.join(', ') || ''} onChange={(e) => setShowEdit({ ...showEdit, linked_adr_ids: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="adr-id-1, adr-id-2" />
-            <Textarea label="Content (JSON)" value={JSON.stringify(showEdit.content, null, 2)} onChange={(e) => { try { setShowEdit({ ...showEdit, content: JSON.parse(e.target.value) }); } catch {} }} className="font-mono text-xs" rows={10} />
-            <div className="flex justify-end gap-3 pt-4">
-              <Button type="button" variant="ghost" onClick={() => setShowEdit(null)}>Cancel</Button>
-              <Button type="submit" loading={updateMutation.isPending}>Save</Button>
-            </div>
-          </form>
-        )}
-      </Modal>
+       <Drawer open={!!showEdit} onClose={() => setShowEdit(null)} title="Edit Spec" size="lg">
+         {showEdit && (
+           <form onSubmit={handleUpdate} className="space-y-4">
+             <Input label="Title" value={showEdit.title} onChange={(e) => setShowEdit({ ...showEdit, title: e.target.value })} />
+             <Select label="Status" value={showEdit.status} onChange={(e) => setShowEdit({ ...showEdit, status: e.target.value as SpecOut['status'] })}>
+               {STATUS_OPTIONS.map((s) => (
+                 <option key={s.value} value={s.value}>{s.label}</option>
+               ))}
+             </Select>
+             <Select label="Format" value={showEdit.format} onChange={(e) => setShowEdit({ ...showEdit, format: e.target.value as SpecOut['format'] })}>
+               {FORMAT_OPTIONS.map((f) => (
+                 <option key={f.value} value={f.value}>{f.label}</option>
+               ))}
+             </Select>
+             <Input label="Tags (comma-separated)" value={showEdit.tags?.join(', ') || ''} onChange={(e) => setShowEdit({ ...showEdit, tags: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="tag1, tag2" />
+             <Input label="Bounded Context ID" value={showEdit.bounded_context_id || ''} onChange={(e) => setShowEdit({ ...showEdit, bounded_context_id: e.target.value || null })} placeholder="context-id" />
+             <Input label="Linked ADR IDs (comma-separated)" value={showEdit.linked_adr_ids?.join(', ') || ''} onChange={(e) => setShowEdit({ ...showEdit, linked_adr_ids: e.target.value.split(',').map((t) => t.trim()).filter(Boolean) })} placeholder="adr-id-1, adr-id-2" />
+             <Textarea label="Content (JSON)" value={JSON.stringify(showEdit.content, null, 2)} onChange={(e) => { try { setShowEdit({ ...showEdit, content: JSON.parse(e.target.value) }); } catch {} }} className="font-mono text-xs" rows={10} />
+             <div className="flex justify-end gap-3 pt-4">
+               <Button type="button" variant="ghost" onClick={() => setShowEdit(null)}>Cancel</Button>
+               <Button type="submit" loading={updateMutation.isPending}>Save</Button>
+             </div>
+           </form>
+         )}
+       </Drawer>
 
-      <Modal open={showVersions.length > 0} onClose={() => { setShowVersions([]); setShowVersionDetail(null); }} title="Version History" size="xl">
-        {versionsLoading ? (
-          <div className="flex justify-center p-8"><Spinner /></div>
-        ) : (
-          <div className="space-y-3">
-            {showVersions.map((v) => (
-              <div key={v.id} className="p-3 bg-foundry-800 rounded hover:bg-foundry-700 cursor-pointer transition-colors" onClick={() => setShowVersionDetail(v)}>
-                <div className="flex items-center justify-between">
-                  <span className="font-mono text-amber-400">v{v.version_number}</span>
-                  <span className="text-xs text-foundry-400">{new Date(v.created_at).toLocaleString()}</span>
-                </div>
-                {v.change_summary && <p className="mt-1 text-sm text-foundry-300">{v.change_summary}</p>}
-                <p className="mt-1 text-xs text-foundry-500">Click to view full content</p>
-              </div>
-            ))}
-          </div>
-        )}
-      </Modal>
+       <Drawer open={showVersions.length > 0} onClose={() => { setShowVersions([]); setShowVersionDetail(null); }} title="Version History" size="xl">
+         {versionsLoading ? (
+           <div className="flex justify-center p-8"><Spinner /></div>
+         ) : (
+           <div className="space-y-3">
+             {showVersions.map((v) => (
+               <div key={v.id} className="p-3 bg-foundry-800 rounded hover:bg-foundry-700 cursor-pointer transition-colors" onClick={() => setShowVersionDetail(v)}>
+                 <div className="flex items-center justify-between">
+                   <span className="font-mono text-amber-400">v{v.version_number}</span>
+                   <span className="text-xs text-foundry-400">{new Date(v.created_at).toLocaleString()}</span>
+                 </div>
+                 {v.change_summary && <p className="mt-1 text-sm text-foundry-300">{v.change_summary}</p>}
+                 <p className="mt-1 text-xs text-foundry-500">Click to view full content</p>
+               </div>
+             ))}
+           </div>
+         )}
+       </Drawer>
 
-      <Modal open={!!showVersionDetail} onClose={() => setShowVersionDetail(null)} title={`Version ${showVersionDetail?.version_number}`} size="xl">
-        {showVersionDetail && (
-          <div className="space-y-4">
-            <div className="flex items-center gap-4">
-              <Badge variant="neutral">v{showVersionDetail.version_number}</Badge>
-              <span className="text-sm text-foundry-400">{new Date(showVersionDetail.created_at).toLocaleString()}</span>
-            </div>
-            {showVersionDetail.change_summary && (
-              <p className="text-sm text-foundry-300">{showVersionDetail.change_summary}</p>
-            )}
-            <div className="p-4 bg-foundry-800 rounded">
-              <pre className="font-mono text-xs text-foundry-300 whitespace-pre-wrap overflow-auto max-h-96">
-                {JSON.stringify(showVersionDetail.content, null, 2)}
-              </pre>
-            </div>
-          </div>
-        )}
-      </Modal>
+       <Drawer open={!!showVersionDetail} onClose={() => setShowVersionDetail(null)} title={`Version ${showVersionDetail?.version_number}`} size="xl">
+         {showVersionDetail && (
+           <div className="space-y-4">
+             <div className="flex items-center gap-4">
+               <Badge variant="neutral">v{showVersionDetail.version_number}</Badge>
+               <span className="text-sm text-foundry-400">{new Date(showVersionDetail.created_at).toLocaleString()}</span>
+             </div>
+             {showVersionDetail.change_summary && (
+               <p className="text-sm text-foundry-300">{showVersionDetail.change_summary}</p>
+             )}
+             <div className="p-4 bg-foundry-800 rounded">
+               <pre className="font-mono text-xs text-foundry-300 whitespace-pre-wrap overflow-auto max-h-96">
+                 {JSON.stringify(showVersionDetail.content, null, 2)}
+               </pre>
+             </div>
+           </div>
+         )}
+       </Drawer>
     </div>
   );
 }

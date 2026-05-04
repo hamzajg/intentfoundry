@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adrApi, contextApi, fitnessApi, specApi } from '../api/client';
 import { useApiToast } from '../components/ui';
 import { useProjectStore } from '../stores';
-import { Badge, Button, Card, EmptyState, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Input, Select, Spinner, Textarea } from '../components/ui';
 import type { ADROut, BoundedContextOut, FitnessFunctionOut, FitnessRunResponse } from '../api/client';
+import { Drawer } from '../components/Drawer';
 
 const ADR_STATUS_OPTIONS = [
   { value: 'proposed', label: 'Proposed' },
@@ -89,7 +90,7 @@ export function Architecture() {
     queryKey: ['specs', projectId],
     queryFn: async () => {
       const res = await specApi.list(projectId!);
-      return res.data.items;
+      return res.data.items || res.data;
     },
     enabled: !!projectId,
   });
@@ -466,7 +467,7 @@ export function Architecture() {
         </div>
       )}
 
-      <Modal open={showADRCreate} onClose={() => setShowADRCreate(false)} title="Create ADR" size="lg">
+      <Drawer open={showADRCreate} onClose={() => setShowADRCreate(false)} title="Create ADR" size="lg">
         <form onSubmit={handleCreateADR} className="space-y-4">
           <Input label="Title" value={newADR.title} onChange={(e) => setNewADR({ ...newADR, title: e.target.value })} placeholder="ADR title" required />
           <Textarea label="Context" value={newADR.context} onChange={(e) => setNewADR({ ...newADR, context: e.target.value })} placeholder="What led to this decision?" required />
@@ -478,9 +479,9 @@ export function Architecture() {
             <Button type="submit" loading={createADRMutation.isPending}>Create</Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
 
-      <Modal open={!!showADREdit} onClose={() => setShowADREdit(null)} title="Edit ADR" size="lg">
+      <Drawer open={!!showADREdit} onClose={() => setShowADREdit(null)} title="Edit ADR" size="lg">
         {showADREdit && (
           <form onSubmit={handleUpdateADR} className="space-y-4">
             <Input label="Title" value={showADREdit.title} onChange={(e) => setShowADREdit({ ...showADREdit, title: e.target.value })} />
@@ -504,9 +505,9 @@ export function Architecture() {
             </div>
           </form>
         )}
-      </Modal>
+      </Drawer>
 
-      <Modal open={showFitnessCreate} onClose={() => setShowFitnessCreate(false)} title="Create Fitness Function" size="lg">
+      <Drawer open={showFitnessCreate} onClose={() => setShowFitnessCreate(false)} title="Create Fitness Function" size="lg">
         <form onSubmit={handleCreateFitness} className="space-y-4">
           <Input label="Name" value={newFitness.name} onChange={(e) => setNewFitness({ ...newFitness, name: e.target.value })} placeholder="Function name" required />
           <Input label="Description" value={newFitness.description} onChange={(e) => setNewFitness({ ...newFitness, description: e.target.value })} placeholder="What does this check?" />
@@ -526,9 +527,9 @@ export function Architecture() {
             <Button type="submit" loading={createFitnessMutation.isPending}>Create</Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
 
-      <Modal open={!!showFitnessEdit} onClose={() => setShowFitnessEdit(null)} title="Edit Fitness Function" size="lg">
+      <Drawer open={!!showFitnessEdit} onClose={() => setShowFitnessEdit(null)} title="Edit Fitness Function" size="lg">
         {showFitnessEdit && (
           <form onSubmit={handleUpdateFitness} className="space-y-4">
             <Input label="Name" value={showFitnessEdit.name} onChange={(e) => setShowFitnessEdit({ ...showFitnessEdit, name: e.target.value })} />
@@ -549,9 +550,9 @@ export function Architecture() {
             </div>
           </form>
         )}
-      </Modal>
+      </Drawer>
 
-      <Modal open={showContextCreate} onClose={() => setShowContextCreate(false)} title="Create Bounded Context">
+      <Drawer open={showContextCreate} onClose={() => setShowContextCreate(false)} title="Create Bounded Context">
         <form onSubmit={handleCreateContext} className="space-y-4">
           <Input label="Name" value={newContext.name} onChange={(e) => setNewContext({ ...newContext, name: e.target.value })} placeholder="Context name" required />
           <Input label="Description" value={newContext.description} onChange={(e) => setNewContext({ ...newContext, description: e.target.value })} placeholder="What does this context handle?" />
@@ -562,9 +563,9 @@ export function Architecture() {
             <Button type="submit" loading={createContextMutation.isPending}>Create</Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
 
-      <Modal open={!!showContextEdit} onClose={() => setShowContextEdit(null)} title="Edit Bounded Context">
+      <Drawer open={!!showContextEdit} onClose={() => setShowContextEdit(null)} title="Edit Bounded Context">
         {showContextEdit && (
           <form onSubmit={handleUpdateContext} className="space-y-4">
             <Input label="Name" value={showContextEdit.name} onChange={(e) => setShowContextEdit({ ...showContextEdit, name: e.target.value })} />
@@ -577,38 +578,38 @@ export function Architecture() {
             </div>
           </form>
         )}
-      </Modal>
+      </Drawer>
 
-      <Modal open={showFitnessResults} onClose={() => setShowFitnessResults(false)} title="Fitness Run Results" size="lg">
+      <Drawer open={showFitnessResults} onClose={() => setShowFitnessResults(false)} title="Fitness Run Results" size="lg">
         {fitnessRunResult && (
           <div className="space-y-4">
             <div className="grid grid-cols-4 gap-4">
-              <div className="p-3 bg-foundry-800 rounded text-center">
-                <div className="text-2xl font-mono font-bold text-emerald-400">{fitnessRunResult.passed}</div>
-                <div className="text-xs text-foundry-400">Passed</div>
+              <div className="p-3 bg-bg-tertiary rounded text-center">
+                <div className="text-2xl font-mono font-bold text-success">{fitnessRunResult.passed}</div>
+                <div className="text-xs text-text-tertiary">Passed</div>
               </div>
-              <div className="p-3 bg-foundry-800 rounded text-center">
-                <div className="text-2xl font-mono font-bold text-red-400">{fitnessRunResult.failed}</div>
-                <div className="text-xs text-foundry-400">Failed</div>
+              <div className="p-3 bg-bg-tertiary rounded text-center">
+                <div className="text-2xl font-mono font-bold text-danger">{fitnessRunResult.failed}</div>
+                <div className="text-xs text-text-tertiary">Failed</div>
               </div>
-              <div className="p-3 bg-foundry-800 rounded text-center">
-                <div className="text-2xl font-mono font-bold text-amber-400">{fitnessRunResult.errors}</div>
-                <div className="text-xs text-foundry-400">Errors</div>
+              <div className="p-3 bg-bg-tertiary rounded text-center">
+                <div className="text-2xl font-mono font-bold text-warning">{fitnessRunResult.errors}</div>
+                <div className="text-xs text-text-tertiary">Errors</div>
               </div>
-              <div className="p-3 bg-foundry-800 rounded text-center">
-                <div className="text-2xl font-mono font-bold text-foundry-300">{fitnessRunResult.skipped}</div>
-                <div className="text-xs text-foundry-400">Skipped</div>
+              <div className="p-3 bg-bg-tertiary rounded text-center">
+                <div className="text-2xl font-mono font-bold text-text-secondary">{fitnessRunResult.skipped}</div>
+                <div className="text-xs text-text-tertiary">Skipped</div>
               </div>
             </div>
             <div className="space-y-2 max-h-96 overflow-auto">
-              {fitnessRunResult.results.map((result, idx) => (
-                <div key={idx} className="p-3 bg-foundry-800 rounded">
+              {fitnessRunResult.results.map((result, idx: number) => (
+                <div key={idx} className="p-3 bg-bg-tertiary rounded">
                   <div className="flex items-center justify-between">
-                    <span className="font-medium text-foundry-100">{result.function_name}</span>
+                    <span className="font-medium text-text-primary">{result.function_name}</span>
                     <Badge variant={result.result === 'pass' ? 'success' : result.result === 'fail' ? 'error' : result.result === 'error' ? 'error' : 'info'}>{result.result}</Badge>
                   </div>
-                  {result.message && <p className="mt-1 text-sm text-foundry-400">{result.message}</p>}
-                  <div className="mt-1 text-xs text-foundry-400">
+                  {result.message && <p className="mt-1 text-sm text-text-secondary">{result.message}</p>}
+                  <div className="mt-1 text-xs text-text-tertiary">
                     Severity: {result.severity} | Duration: {result.duration_ms}ms
                   </div>
                 </div>
@@ -616,35 +617,35 @@ export function Architecture() {
             </div>
           </div>
         )}
-      </Modal>
+      </Drawer>
 
-      <Modal open={showContextBuilder} onClose={() => setShowContextBuilder(false)} title="AI Context Builder" size="xl">
+      <Drawer open={showContextBuilder} onClose={() => setShowContextBuilder(false)} title="AI Context Builder" size="xl">
         <form onSubmit={handleBuildContext} className="space-y-4">
           <div>
             <label className="label">Select Specs</label>
             <div className="space-y-1 max-h-40 overflow-auto">
-              {specs.filter(s => aiContextData.spec_ids.includes(s.id)).map(s => (
-                <div key={s.id} className="flex items-center gap-2 p-2 bg-foundry-800 rounded">
+              {(specs || []).filter(s => aiContextData.spec_ids.includes(s.id)).map(s => (
+                <div key={s.id} className="flex items-center gap-2 p-2 bg-bg-tertiary rounded">
                   <input type="checkbox" checked={aiContextData.spec_ids.includes(s.id)} onChange={e => setAiContextData({...aiContextData, spec_ids: e.target.checked ? [...aiContextData.spec_ids, s.id] : aiContextData.spec_ids.filter(id => id !== s.id)})} />
-                  <span className="text-sm text-foundry-100">{s.title}</span>
+                  <span className="text-sm text-text-primary">{s.title}</span>
                 </div>
               ))}
-              {specs.filter(s => !aiContextData.spec_ids.includes(s.id)).map(s => (
-                <div key={s.id} className="flex items-center gap-2 p-2 bg-foundry-800 rounded">
+              {(specs || []).filter(s => !aiContextData.spec_ids.includes(s.id)).map(s => (
+                <div key={s.id} className="flex items-center gap-2 p-2 bg-bg-tertiary rounded">
                   <input type="checkbox" checked={aiContextData.spec_ids.includes(s.id)} onChange={e => setAiContextData({...aiContextData, spec_ids: e.target.checked ? [...aiContextData.spec_ids, s.id] : aiContextData.spec_ids.filter(id => id !== s.id)})} />
-                  <span className="text-sm text-foundry-300">{s.title}</span>
+                  <span className="text-sm text-text-secondary">{s.title}</span>
                 </div>
               ))}
             </div>
           </div>
-          <Select label="Output Format" value={aiContextData.format} onChange={(e) => setAiContextData({ ...aiContextData, format: e.target.value })}>
+          <Select label="Output Format" value={aiContextData.format} onChange={(e) => setAiContextData({...aiContextData, format: e.target.value})}>
             <option value="markdown">Markdown</option>
             <option value="json">JSON</option>
             <option value="yaml">YAML</option>
           </Select>
           <div className="flex items-center gap-2">
-            <input type="checkbox" checked={aiContextData.include_fitness_constraints} onChange={(e) => setAiContextData({ ...aiContextData, include_fitness_constraints: e.target.checked })} />
-            <span className="text-sm text-foundry-300">Include fitness constraints</span>
+            <input type="checkbox" checked={aiContextData.include_fitness_constraints} onChange={(e) => setAiContextData({...aiContextData, include_fitness_constraints: e.target.checked})} />
+            <span className="text-sm text-text-secondary">Include fitness constraints</span>
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setShowContextBuilder(false)}>Cancel</Button>
@@ -654,10 +655,10 @@ export function Architecture() {
         {contextOutput && (
           <div className="mt-4">
             <div className="label">Generated Context</div>
-            <pre className="p-4 bg-foundry-800 rounded text-sm text-foundry-100 font-mono overflow-auto max-h-96">{contextOutput}</pre>
+            <pre className="p-4 bg-bg-tertiary rounded text-sm text-text-primary font-mono overflow-auto max-h-96">{contextOutput}</pre>
           </div>
         )}
-      </Modal>
+      </Drawer>
     </div>
   );
 }

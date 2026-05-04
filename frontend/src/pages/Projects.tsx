@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { projectsApi } from '../api/client';
 import { useProjectStore } from '../stores';
-import { Button, Card, EmptyState, Input, Modal, Spinner } from '../components/ui';
+import { Button, Card, EmptyState, Input, Drawer, Spinner } from '../components/ui';
 import { useApiToast } from '../components/ui';
 
 export function Projects() {
@@ -182,73 +182,73 @@ export function Projects() {
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Project">
-        <form onSubmit={handleCreate} className="space-y-4">
-          <Input
-            label="Project Name"
-            value={newProject.name}
-            onChange={(e) => setNewProject({
-              ...newProject,
-              name: e.target.value,
-              slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-            })}
-            placeholder="My Project"
-            required
-          />
-          <Input
-            label="Slug"
-            value={newProject.slug}
-            onChange={(e) => setNewProject({ ...newProject, slug: e.target.value })}
-            placeholder="my-project"
-            required
-          />
-          <Input
-            label="Description"
-            value={newProject.description}
-            onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
-            placeholder="Project description"
-          />
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
-            <Button type="submit" loading={createMutation.isPending}>Create</Button>
-          </div>
-        </form>
-      </Modal>
+       <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="Create Project">
+         <form onSubmit={handleCreate} className="space-y-4">
+           <Input
+             label="Project Name"
+             value={newProject.name}
+             onChange={(e) => setNewProject({
+               ...newProject,
+               name: e.target.value,
+               slug: e.target.value.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+             })}
+             placeholder="My Project"
+             required
+           />
+           <Input
+             label="Slug"
+             value={newProject.slug}
+             onChange={(e) => setNewProject({ ...newProject, slug: e.target.value })}
+             placeholder="my-project"
+             required
+           />
+           <Input
+             label="Description"
+             value={newProject.description}
+             onChange={(e) => setNewProject({ ...newProject, description: e.target.value })}
+             placeholder="Project description"
+           />
+           <div className="flex justify-end gap-3 pt-4">
+             <Button type="button" variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>
+             <Button type="submit" loading={createMutation.isPending}>Create</Button>
+           </div>
+         </form>
+       </Drawer>
 
-      <Modal open={showEdit} onClose={() => setShowEdit(false)} title="Edit Project">
-        <form onSubmit={handleUpdate} className="space-y-4">
-          <Input
-            label="Project Name"
-            value={editProject.name}
-            onChange={(e) => setEditProject({ ...editProject, name: e.target.value })}
-            placeholder="My Project"
-            required
-          />
-          <Input
-            label="Description"
-            value={editProject.description}
-            onChange={(e) => setEditProject({ ...editProject, description: e.target.value })}
-            placeholder="Project description"
-          />
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowEdit(false)}>Cancel</Button>
-            <Button type="submit" loading={updateMutation.isPending}>Update</Button>
-          </div>
-        </form>
-      </Modal>
+       <Drawer open={showEdit} onClose={() => setShowEdit(false)} title="Edit Project">
+         <form onSubmit={handleUpdate} className="space-y-4">
+           <Input
+             label="Project Name"
+             value={editProject.name}
+             onChange={(e) => setEditProject({ ...editProject, name: e.target.value })}
+             placeholder="My Project"
+             required
+           />
+           <Input
+             label="Description"
+             value={editProject.description}
+             onChange={(e) => setEditProject({ ...editProject, description: e.target.value })}
+             placeholder="Project description"
+           />
+           <div className="flex justify-end gap-3 pt-4">
+             <Button type="button" variant="ghost" onClick={() => setShowEdit(false)}>Cancel</Button>
+             <Button type="submit" loading={updateMutation.isPending}>Update</Button>
+           </div>
+         </form>
+       </Drawer>
 
-      <Modal open={showDelete} onClose={() => setShowDelete(false)} title="Delete Project">
-        <div className="space-y-4">
-          <p className="text-sm text-foundry-300">
-            Are you sure you want to delete the project <span className="font-semibold text-foundry-100">{selectedProject?.name}</span>?
-            This action cannot be undone.
-          </p>
-          <div className="flex justify-end gap-3 pt-4">
-            <Button type="button" variant="ghost" onClick={() => setShowDelete(false)}>Cancel</Button>
-            <Button variant="danger" loading={deleteMutation.isPending} onClick={handleDelete}>Delete</Button>
-          </div>
-        </div>
-      </Modal>
+       <Drawer open={showDelete} onClose={() => setShowDelete(false)} title="Delete Project">
+         <div className="space-y-4">
+           <p className="text-sm text-foundry-300">
+             Are you sure you want to delete the project <span className="font-semibold text-foundry-100">{selectedProject?.name}</span>?
+             This action cannot be undone.
+           </p>
+           <div className="flex justify-end gap-3 pt-4">
+             <Button type="button" variant="ghost" onClick={() => setShowDelete(false)}>Cancel</Button>
+             <Button variant="danger" loading={deleteMutation.isPending} onClick={handleDelete}>Delete</Button>
+           </div>
+         </div>
+       </Drawer>
     </div>
   );
 }

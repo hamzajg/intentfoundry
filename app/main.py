@@ -117,6 +117,16 @@ def create_app() -> FastAPI:
     # Routers
     app.include_router(api_router, prefix=settings.api_prefix)
 
+    # Root API endpoint
+    @app.get("/", tags=["system"], include_in_schema=False)
+    async def root():
+        return {
+            "name": "IntentFoundry API",
+            "version": settings.app_version,
+            "docs": "/docs",
+            "community": "https://tanoshii-computing.com/community",
+        }
+
     # Health check
     @app.get("/health", tags=["system"], include_in_schema=False)
     async def health():
@@ -128,16 +138,7 @@ def create_app() -> FastAPI:
             "database": "ok" if db_ok else "unavailable",
         }
 
-    @app.get("/", tags=["system"], include_in_schema=False)
-    async def root():
-        return {
-            "name": "IntentFoundry API",
-            "version": settings.app_version,
-            "docs": "/docs",
-            "community": "https://tanoshii-computing.com/community",
-        }
-
-    # Frontend static files (SPA)
+    # Frontend static files (SPA) - must be registered AFTER API routes
     static_dir = Path(__file__).parent / "static"
     if static_dir.exists():
         from fastapi.responses import HTMLResponse

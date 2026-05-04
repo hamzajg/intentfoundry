@@ -3,8 +3,9 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { authApi } from '../api/client';
 import { useApiToast } from '../components/ui';
 import { useAuthStore } from '../stores';
-import { Badge, Button, Card, EmptyState, Input, Modal, Spinner } from '../components/ui';
+import { Badge, Button, Card, EmptyState, Input, Spinner } from '../components/ui';
 import type { APIKeyOut, APIKeyCreated } from '../api/client';
+import { Drawer } from '../components/Drawer';
 
 export function Settings() {
   const [activeTab, setActiveTab] = useState<'profile' | 'api-keys'>('profile');
@@ -196,7 +197,7 @@ function ApiKeysTab() {
         </div>
       )}
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create API Key">
+      <Drawer open={showCreate} onClose={() => setShowCreate(false)} title="Create API Key">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -220,7 +221,7 @@ function ApiKeysTab() {
             </Button>
           </div>
         </form>
-      </Modal>
+      </Drawer>
     </div>
   );
 }
