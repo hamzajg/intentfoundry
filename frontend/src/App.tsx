@@ -5,6 +5,7 @@ import { Spinner, ToastProvider } from './components/ui';
 import { useAuthStore } from './stores';
 import { authApi } from './api/client';
 
+const Landing = lazy(() => import('./pages/Landing').then((m) => ({ default: m.Landing })));
 const Login = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Login })));
 const Register = lazy(() => import('./pages/Auth').then((m) => ({ default: m.Register })));
 const Projects = lazy(() => import('./pages/Projects').then((m) => ({ default: m.Projects })));
@@ -43,6 +44,7 @@ function App() {
           </div>
         }>
           <Routes>
+            <Route path="/" element={<Landing />} />
             <Route path="/login" element={<Login />} />
             <Route path="/register" element={<Register />} />
             
@@ -58,7 +60,7 @@ function App() {
               </Route>
             </Route>
             
-            <Route path="*" element={<Navigate to="/projects" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Suspense>
       </BrowserRouter>
