@@ -189,9 +189,15 @@ class TelemetryService:
             if metrics
             else None
         )
-        avg_rework = sum(m.spec_rework_count for m in metrics) / len(metrics) if metrics else 0.0
+        avg_rework = (
+            sum(m.spec_rework_count for m in metrics) / len(metrics)
+            if metrics
+            else 0.0
+        )
         avg_drift = (
-            sum(m.architecture_drift_count for m in metrics) / len(metrics) if metrics else 0.0
+            sum(m.architecture_drift_count for m in metrics) / len(metrics)
+            if metrics
+            else 0.0
         )
         reflect_rate = (
             sum(1 for m in metrics if m.reflect_stage_completed) / len(metrics)
@@ -206,7 +212,7 @@ class TelemetryService:
             select(TelemetryEvent).where(
                 TelemetryEvent.project_id == project_id,
                 TelemetryEvent.event_type.in_(
-                    ["fitness.passed", "architecture.drift_detected"]
+                    ["fitness.passed", "fitness.failed"]
                 ),
                 TelemetryEvent.created_at >= thirty_days_ago,
             )
