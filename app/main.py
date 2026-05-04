@@ -10,11 +10,13 @@ Docker:
 import time
 import uuid
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import structlog
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
@@ -62,7 +64,7 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── CORS ─────────────────────────────────────────────────────
+    # CORS
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.allowed_origins,
@@ -71,7 +73,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # ── Request ID + timing middleware ───────────────────────────
+    # Request ID + timing middleware
     @app.middleware("http")
     async def request_context_middleware(request: Request, call_next):
         request_id = str(uuid.uuid4())
@@ -94,7 +96,7 @@ def create_app() -> FastAPI:
         )
         return response
 
-    # ── Global exception handlers ────────────────────────────────
+    # Global exception handlers
     @app.exception_handler(Exception)
     async def unhandled_exception_handler(request: Request, exc: Exception):
         log.error(
@@ -112,10 +114,10 @@ def create_app() -> FastAPI:
             },
         )
 
-    # ── Routers ──────────────────────────────────────────────────
+    # Routers
     app.include_router(api_router, prefix=settings.api_prefix)
 
-    # ── Health check ─────────────────────────────────────────────
+    # Health check
     @app.get("/health", tags=["system"], include_in_schema=False)
     async def health():
         db_ok = await check_db_connection()
@@ -134,6 +136,27 @@ def create_app() -> FastAPI:
             "docs": "/docs",
             "community": "https://tanoshii-computing.com/community",
         }
+
+    # Frontend static files (SPA)
+    static_dir = Path(__file__).parent / "static"
+    if static_dir.exists():
+        from fastapi.responses import HTMLResponse
+
+        # Mount JS/CSS assets at /assets so they are served directly
+        assets_dir = static_dir / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+
+        # Catch-all SPA fallback — serves index.html for any path that
+        # doesn't match an API route or a mounted static asset.
+        @app.get("/{full_path:path}", include_in_schema=False)
+        async def serve_spa_fallback(full_path: str):
+            index_file = static_dir / "index.html"
+            if index_file.exists():
+                return HTMLResponse(content=index_file.read_text())
+            return JSONResponse(status_code=404, content={"detail": "Not found"})
+
+        log.info("intentfoundry.static_mounted", path=str(static_dir))
 
     return app
 

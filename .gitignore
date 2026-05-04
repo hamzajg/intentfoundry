@@ -164,3 +164,6 @@ Thumbs.db
 bin/
 include/
 pyvenv.cfg
+
+# Frontend
+node_modules/

@@ -1,0 +1,137 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --color-bg: #0a0a0b;
+  --color-surface: #151517;
+  --color-surface-raised: #1a1a1d;
+  --color-border: #222226;
+  --color-text: #d4d4db;
+  --color-text-dim: #7a7a87;
+  --color-amber: #d98200;
+  --color-amber-glow: rgba(217, 130, 0, 0.4);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) var(--color-bg);
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--color-bg);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-dim);
+}
+
+@layer base {
+  body {
+    @apply bg-foundry-950 text-foundry-100 font-sans;
+  }
+  
+  input, textarea, select {
+    @apply bg-foundry-800 border-foundry-600 text-foundry-100;
+  }
+  
+  input::placeholder, textarea::placeholder {
+    @apply text-foundry-400;
+  }
+  
+  input:focus, textarea:focus, select:focus {
+    @apply outline-none border-amber-500 ring-1 ring-amber-500/30;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium rounded transition-all duration-150;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-primary {
+    @apply bg-amber-600 text-white hover:bg-amber-500 active:bg-amber-700;
+  }
+  
+  .btn-secondary {
+    @apply bg-foundry-700 text-foundry-100 hover:bg-foundry-600 active:bg-foundry-750 border border-foundry-600;
+  }
+  
+  .btn-ghost {
+    @apply bg-transparent text-foundry-300 hover:text-foundry-100 hover:bg-foundry-750;
+  }
+  
+  .btn-danger {
+    @apply bg-red-900/50 text-red-300 hover:bg-red-900 hover:text-red-100 border border-red-800;
+  }
+  
+  .card {
+    @apply bg-foundry-800 border border-foundry-600 rounded;
+  }
+  
+  .card-raised {
+    @apply bg-foundry-750 border-foundry-600 shadow-lg;
+  }
+  
+  .input {
+    @apply w-full px-3 py-2 text-sm rounded border border-foundry-600 bg-foundry-800;
+    @apply placeholder:text-foundry-400 focus:border-amber-500 focus:ring-1 focus:ring-amber-500/30;
+  }
+  
+  .label {
+    @apply block text-xs font-mono text-foundry-300 uppercase tracking-wider mb-1.5;
+  }
+  
+  .badge {
+    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded;
+  }
+  
+  .badge-amber {
+    @apply bg-amber-900/40 text-amber-300 border border-amber-700/50;
+  }
+  
+  .badge-success {
+    @apply bg-emerald-900/40 text-emerald-300 border border-emerald-700/50;
+  }
+  
+  .badge-error {
+    @apply bg-red-900/40 text-red-300 border border-red-700/50;
+  }
+  
+  .badge-info {
+    @apply bg-blue-900/40 text-blue-300 border border-blue-700/50;
+  }
+  
+  .link {
+    @apply text-amber-400 hover:text-amber-300 underline-offset-2 hover:underline;
+  }
+  
+  .divider {
+    @apply h-px bg-foundry-600;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-amber-300 to-amber-500 bg-clip-text text-transparent;
+  }
+  
+  .glow-amber {
+    box-shadow: 0 0 20px var(--color-amber-glow);
+  }
+  
+  .glow-amber-sm {
+    box-shadow: 0 0 10px var(--color-amber-glow);
+  }
+}
