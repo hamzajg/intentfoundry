@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { path: '/architecture', label: 'Architecture', icon: '⚙' },
   { path: '/loop', label: 'Loop', icon: '⟳' },
   { path: '/telemetry', label: 'Telemetry', icon: '▦' },
+  { path: '/settings', label: 'Settings', icon: '⚑' },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {

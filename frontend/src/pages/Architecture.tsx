@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { adrApi, contextApi, fitnessApi, specApi } from '../api/client';
+import { useApiToast } from '../components/ui';
 import { useProjectStore } from '../stores';
 import { Badge, Button, Card, EmptyState, Input, Modal, Select, Spinner, Textarea } from '../components/ui';
-import type { ADROut, BoundedContextOut, FitnessFunctionOut, SpecOut } from '../api/client';
+import type { ADROut, BoundedContextOut, FitnessFunctionOut, FitnessRunResponse } from '../api/client';
 
 const ADR_STATUS_OPTIONS = [
   { value: 'proposed', label: 'Proposed' },
@@ -34,139 +36,268 @@ const SEVERITY_OPTIONS = [
 
 export function Architecture() {
   const { activeProject } = useProjectStore();
-  const [adrs, setAdrs] = useState<ADROut[]>([]);
-  const [fitnessFunctions, setFitnessFunctions] = useState<FitnessFunctionOut[]>([]);
-  const [boundedContexts, setBoundedContexts] = useState<BoundedContextOut[]>([]);
-  const [specs, setSpecs] = useState<SpecOut[]>([]);
-  const [loading, setLoading] = useState(true);
+  const queryClient = useQueryClient();
+  const apiToast = useApiToast();
+  const projectId = activeProject?.id;
+
   const [activeTab, setActiveTab] = useState<'adrs' | 'fitness' | 'contexts'>('adrs');
 
   const [showADRCreate, setShowADRCreate] = useState(false);
   const [showADREdit, setShowADREdit] = useState<ADROut | null>(null);
   const [showFitnessCreate, setShowFitnessCreate] = useState(false);
+  const [showFitnessEdit, setShowFitnessEdit] = useState<FitnessFunctionOut | null>(null);
   const [showContextCreate, setShowContextCreate] = useState(false);
+  const [showContextEdit, setShowContextEdit] = useState<BoundedContextOut | null>(null);
   const [showContextBuilder, setShowContextBuilder] = useState(false);
   const [contextOutput, setContextOutput] = useState<string>('');
-  const [contextLoading, setContextLoading] = useState(false);
+  const [fitnessRunResult, setFitnessRunResult] = useState<FitnessRunResponse | null>(null);
+  const [showFitnessResults, setShowFitnessResults] = useState(false);
 
   const [newADR, setNewADR] = useState({ title: '', context: '', decision: '', consequences: '', alternatives_considered: '' });
   const [newFitness, setNewFitness] = useState({ name: '', description: '', severity: 'error', check_type: 'regex', check_config: { pattern: '', file_glob: '*', should_match: true } });
   const [newContext, setNewContext] = useState({ name: '', description: '', includes: '', excludes: '' });
   const [aiContextData, setAiContextData] = useState({ spec_ids: [] as string[], format: 'markdown', include_fitness_constraints: true });
 
-  useEffect(() => {
-    if (activeProject) loadData();
-  }, [activeProject]);
+  const adrsQuery = useQuery({
+    queryKey: ['adrs', projectId],
+    queryFn: async () => {
+      const res = await adrApi.list(projectId!);
+      return res.data.items;
+    },
+    enabled: !!projectId,
+  });
 
-  const loadData = async () => {
-    if (!activeProject) return;
-    setLoading(true);
-    try {
-      const [adrRes, fitnessRes, ctxRes, specRes] = await Promise.all([adrApi.list(activeProject.id), fitnessApi.list(activeProject.id), contextApi.boundedContexts(activeProject.id), specApi.list(activeProject.id)]);
-      setAdrs(adrRes.data.items);
-      setFitnessFunctions(fitnessRes.data);
-      setBoundedContexts(ctxRes.data);
-      setSpecs(specRes.data.items);
-    } catch {
-    } finally {
-      setLoading(false);
-    }
-  };
+  const fitnessQuery = useQuery({
+    queryKey: ['fitness', projectId],
+    queryFn: async () => {
+      const res = await fitnessApi.list(projectId!);
+      return res.data;
+    },
+    enabled: !!projectId,
+  });
 
-  const handleCreateADR = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeProject) return;
-    try {
-      const res = await adrApi.create(activeProject.id, newADR);
-      setAdrs([...adrs, res.data]);
+  const contextsQuery = useQuery({
+    queryKey: ['contexts', projectId],
+    queryFn: async () => {
+      const res = await contextApi.boundedContexts(projectId!);
+      return res.data;
+    },
+    enabled: !!projectId,
+  });
+
+  const specsQuery = useQuery({
+    queryKey: ['specs', projectId],
+    queryFn: async () => {
+      const res = await specApi.list(projectId!);
+      return res.data.items;
+    },
+    enabled: !!projectId,
+  });
+
+  const createADRMutation = useMutation({
+    mutationFn: (data: { title: string; context: string; decision: string; consequences: string; alternatives_considered?: string }) =>
+      adrApi.create(projectId!, data).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adrs', projectId] });
       setShowADRCreate(false);
       setNewADR({ title: '', context: '', decision: '', consequences: '', alternatives_considered: '' });
-    } catch {
-    }
-  };
+      apiToast.success('ADR created');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to create ADR'),
+  });
 
-  const handleUpdateADR = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeProject || !showADREdit) return;
-    try {
-      const res = await adrApi.update(activeProject.id, showADREdit.id, { title: showADREdit.title, status: showADREdit.status, context: showADREdit.context, decision: showADREdit.decision, consequences: showADREdit.consequences });
-      setAdrs(adrs.map((a) => (a.id === res.data.id ? res.data : a)));
+  const updateADRMutation = useMutation({
+    mutationFn: (data: { id: string; title?: string; status?: string; context?: string; decision?: string; consequences?: string; superseded_by_id?: string }) =>
+      adrApi.update(projectId!, data.id, { title: data.title, status: data.status, context: data.context, decision: data.decision, consequences: data.consequences, superseded_by_id: data.superseded_by_id }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adrs', projectId] });
       setShowADREdit(null);
-    } catch {
-    }
-  };
+      apiToast.success('ADR updated');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to update ADR'),
+  });
 
-  const handleDeleteADR = async (id: string) => {
-    if (!activeProject || !confirm('Delete this ADR?')) return;
-    try {
-      await adrApi.delete(activeProject.id, id);
-      setAdrs(adrs.filter((a) => a.id !== id));
-    } catch {
-    }
-  };
+  const deleteADRMutation = useMutation({
+    mutationFn: (id: string) => adrApi.delete(projectId!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adrs', projectId] });
+      apiToast.success('ADR deleted');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to delete ADR'),
+  });
 
-  const handleCreateFitness = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeProject) return;
-    try {
-      const res = await fitnessApi.create(activeProject.id, { ...newFitness, check_config: newFitness.check_config as Record<string, unknown> });
-      setFitnessFunctions([...fitnessFunctions, res.data]);
+  const createFitnessMutation = useMutation({
+    mutationFn: (data: { name: string; description?: string; severity: string; check_type: string; check_config: Record<string, unknown> }) =>
+      fitnessApi.create(projectId!, { ...data, check_config: data.check_config }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fitness', projectId] });
       setShowFitnessCreate(false);
       setNewFitness({ name: '', description: '', severity: 'error', check_type: 'regex', check_config: { pattern: '', file_glob: '*', should_match: true } });
-    } catch {
-    }
-  };
+      apiToast.success('Fitness function created');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to create fitness function'),
+  });
 
-  const handleDeleteFitness = async (id: string) => {
-    if (!activeProject || !confirm('Delete this fitness function?')) return;
-    try {
-      await fitnessApi.delete(activeProject.id, id);
-      setFitnessFunctions(fitnessFunctions.filter((f) => f.id !== id));
-    } catch {
-    }
-  };
+  const updateFitnessMutation = useMutation({
+    mutationFn: (data: { id: string; name?: string; description?: string; severity?: string; check_config?: Record<string, unknown>; is_active?: boolean }) =>
+      fitnessApi.update(projectId!, data.id, { name: data.name, description: data.description, severity: data.severity, check_config: data.check_config, is_active: data.is_active }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fitness', projectId] });
+      setShowFitnessEdit(null);
+      apiToast.success('Fitness function updated');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to update fitness function'),
+  });
 
-  const handleRunFitness = async () => {
-    if (!activeProject || !confirm('Run all fitness functions?')) return;
-    try {
-      await fitnessApi.run(activeProject.id);
-      loadData();
-    } catch {
-    }
-  };
+  const deleteFitnessMutation = useMutation({
+    mutationFn: (id: string) => fitnessApi.delete(projectId!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['fitness', projectId] });
+      apiToast.success('Fitness function deleted');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to delete fitness function'),
+  });
 
-  const handleCreateContext = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeProject) return;
-    try {
-      const res = await contextApi.createBoundedContext(activeProject.id, newContext);
-      setBoundedContexts([...boundedContexts, res.data]);
+  const runFitnessMutation = useMutation({
+    mutationFn: () => fitnessApi.run(projectId!).then(r => r.data),
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['fitness', projectId] });
+      setFitnessRunResult(data);
+      setShowFitnessResults(true);
+      apiToast.success('Fitness run completed', `Passed: ${data.passed}, Failed: ${data.failed}, Errors: ${data.errors}`);
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to run fitness functions'),
+  });
+
+  const createContextMutation = useMutation({
+    mutationFn: (data: { name: string; description?: string; includes?: string; excludes?: string }) =>
+      contextApi.createBoundedContext(projectId!, data).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contexts', projectId] });
       setShowContextCreate(false);
       setNewContext({ name: '', description: '', includes: '', excludes: '' });
-    } catch {
-    }
-  };
+      apiToast.success('Bounded context created');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to create bounded context'),
+  });
 
-  const handleDeleteContext = async (id: string) => {
-    if (!activeProject || !confirm('Delete this bounded context?')) return;
-    try {
-      await contextApi.deleteBoundedContext(activeProject.id, id);
-      setBoundedContexts(boundedContexts.filter((c) => c.id !== id));
-    } catch {
-    }
-  };
+  const updateContextMutation = useMutation({
+    mutationFn: (data: { id: string; name?: string; description?: string; includes?: string; excludes?: string }) =>
+      contextApi.updateBoundedContext(projectId!, data.id, { name: data.name, description: data.description, includes: data.includes, excludes: data.excludes }).then(r => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contexts', projectId] });
+      setShowContextEdit(null);
+      apiToast.success('Bounded context updated');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to update bounded context'),
+  });
 
-  const handleBuildContext = async (e: React.FormEvent) => {
+  const deleteContextMutation = useMutation({
+    mutationFn: (id: string) => contextApi.deleteBoundedContext(projectId!, id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['contexts', projectId] });
+      apiToast.success('Bounded context deleted');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to delete bounded context'),
+  });
+
+  const buildContextMutation = useMutation({
+    mutationFn: () => contextApi.buildContext(projectId!, aiContextData).then(r => r.data),
+    onSuccess: (data) => {
+      setContextOutput(data.context_package);
+      apiToast.success('Context built successfully');
+    },
+    onError: (e) => apiToast.catch(e, 'Failed to build context'),
+  });
+
+  const adrs = adrsQuery.data || [];
+  const fitnessFunctions = fitnessQuery.data || [];
+  const boundedContexts = contextsQuery.data || [];
+  const specs = specsQuery.data || [];
+
+  const isLoading = adrsQuery.isLoading || fitnessQuery.isLoading || contextsQuery.isLoading;
+
+  const handleCreateADR = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!activeProject) return;
-    setContextLoading(true);
-    try {
-      const res = await contextApi.buildContext(activeProject.id, aiContextData);
-      setContextOutput(res.data.context_package);
-    } catch {
-    } finally {
-      setContextLoading(false);
-    }
+    createADRMutation.mutate(newADR);
+  };
+
+  const handleUpdateADR = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showADREdit) return;
+    updateADRMutation.mutate({
+      id: showADREdit.id,
+      title: showADREdit.title,
+      status: showADREdit.status,
+      context: showADREdit.context,
+      decision: showADREdit.decision,
+      consequences: showADREdit.consequences,
+      superseded_by_id: showADREdit.superseded_by_id || undefined,
+    });
+  };
+
+  const handleDeleteADR = (id: string) => {
+    if (!confirm('Delete this ADR?')) return;
+    deleteADRMutation.mutate(id);
+  };
+
+  const handleCreateFitness = (e: React.FormEvent) => {
+    e.preventDefault();
+    createFitnessMutation.mutate({ ...newFitness, check_config: newFitness.check_config as Record<string, unknown> });
+  };
+
+  const handleUpdateFitness = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showFitnessEdit) return;
+    updateFitnessMutation.mutate({
+      id: showFitnessEdit.id,
+      name: showFitnessEdit.name,
+      description: showFitnessEdit.description || undefined,
+      severity: showFitnessEdit.severity,
+      check_config: showFitnessEdit.check_config,
+      is_active: showFitnessEdit.is_active,
+    });
+  };
+
+  const handleDeleteFitness = (id: string) => {
+    if (!confirm('Delete this fitness function?')) return;
+    deleteFitnessMutation.mutate(id);
+  };
+
+  const handleRunFitness = () => {
+    if (!confirm('Run all fitness functions?')) return;
+    runFitnessMutation.mutate();
+  };
+
+  const handleToggleFitnessActive = (fn: FitnessFunctionOut) => {
+    updateFitnessMutation.mutate({ id: fn.id, is_active: !fn.is_active });
+  };
+
+  const handleCreateContext = (e: React.FormEvent) => {
+    e.preventDefault();
+    createContextMutation.mutate(newContext);
+  };
+
+  const handleUpdateContext = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!showContextEdit) return;
+    updateContextMutation.mutate({
+      id: showContextEdit.id,
+      name: showContextEdit.name,
+      description: showContextEdit.description || undefined,
+      includes: showContextEdit.includes || undefined,
+      excludes: showContextEdit.excludes || undefined,
+    });
+  };
+
+  const handleDeleteContext = (id: string) => {
+    if (!confirm('Delete this bounded context?')) return;
+    deleteContextMutation.mutate(id);
+  };
+
+  const handleBuildContext = (e: React.FormEvent) => {
+    e.preventDefault();
+    buildContextMutation.mutate();
   };
 
   if (!activeProject) {
@@ -179,7 +310,7 @@ export function Architecture() {
     );
   }
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <Spinner size="lg" />
@@ -229,6 +360,9 @@ export function Architecture() {
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-amber-400">ADR-{adr.number}</span>
                         <Badge variant={ADR_STATUS_COLORS[adr.status]}>{adr.status}</Badge>
+                        {adr.superseded_by_id && (
+                          <span className="px-2 py-0.5 text-xs font-mono bg-foundry-700 text-foundry-400 rounded">Superseded</span>
+                        )}
                       </div>
                       <h3 className="mt-1 text-lg font-medium text-foundry-100">{adr.title}</h3>
                       <p className="mt-2 text-sm text-foundry-300">{adr.context}</p>
@@ -239,7 +373,7 @@ export function Architecture() {
                     </div>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm" onClick={() => setShowADREdit(adr)}>Edit</Button>
-                      <Button variant="danger" size="sm" onClick={() => handleDeleteADR(adr.id)}>Delete</Button>
+                      <Button variant="danger" size="sm" loading={deleteADRMutation.isPending && deleteADRMutation.variables === adr.id} onClick={() => handleDeleteADR(adr.id)}>Delete</Button>
                     </div>
                   </div>
                 </Card>
@@ -252,7 +386,7 @@ export function Architecture() {
       {activeTab === 'fitness' && (
         <div>
           <div className="flex justify-end gap-2 mb-4">
-            <Button variant="secondary" onClick={handleRunFitness}>Run All</Button>
+            <Button variant="secondary" onClick={handleRunFitness} loading={runFitnessMutation.isPending}>Run All</Button>
             <Button onClick={() => setShowFitnessCreate(true)}>New Function</Button>
           </div>
           {fitnessFunctions.length === 0 ? (
@@ -269,8 +403,22 @@ export function Architecture() {
                       {!fn.is_active && <span className="px-2 py-0.5 text-xs font-mono bg-foundry-700 text-foundry-400 rounded">Inactive</span>}
                     </div>
                     {fn.description && <p className="mt-1 text-sm text-foundry-400">{fn.description}</p>}
+                    <div className="flex items-center gap-4 mt-1 text-xs text-foundry-400">
+                      {fn.last_run_at && <span>Last run: {new Date(fn.last_run_at).toLocaleString()}</span>}
+                      {fn.last_result && (
+                        <span className={`font-mono ${fn.last_result === 'pass' ? 'text-emerald-400' : fn.last_result === 'fail' ? 'text-red-400' : 'text-amber-400'}`}>
+                          Last result: {fn.last_result}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <Button variant="danger" size="sm" onClick={() => handleDeleteFitness(fn.id)}>Delete</Button>
+                  <div className="flex gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => handleToggleFitnessActive(fn)} loading={updateFitnessMutation.isPending}>
+                      {fn.is_active ? 'Deactivate' : 'Activate'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => setShowFitnessEdit(fn)}>Edit</Button>
+                    <Button variant="danger" size="sm" loading={deleteFitnessMutation.isPending && deleteFitnessMutation.variables === fn.id} onClick={() => handleDeleteFitness(fn.id)}>Delete</Button>
+                  </div>
                 </Card>
               ))}
             </div>
@@ -306,7 +454,10 @@ export function Architecture() {
                         </div>
                       )}
                     </div>
-                    <Button variant="danger" size="sm" onClick={() => handleDeleteContext(ctx.id)}>Delete</Button>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" onClick={() => setShowContextEdit(ctx)}>Edit</Button>
+                      <Button variant="danger" size="sm" loading={deleteContextMutation.isPending && deleteContextMutation.variables === ctx.id} onClick={() => handleDeleteContext(ctx.id)}>Delete</Button>
+                    </div>
                   </div>
                 </Card>
               ))}
@@ -324,7 +475,7 @@ export function Architecture() {
           <Textarea label="Alternatives Considered" value={newADR.alternatives_considered} onChange={(e) => setNewADR({ ...newADR, alternatives_considered: e.target.value })} placeholder="Other options considered" />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setShowADRCreate(false)}>Cancel</Button>
-            <Button type="submit">Create</Button>
+            <Button type="submit" loading={createADRMutation.isPending}>Create</Button>
           </div>
         </form>
       </Modal>
@@ -338,12 +489,18 @@ export function Architecture() {
                 <option key={s.value} value={s.value}>{s.label}</option>
               ))}
             </Select>
+            <Select label="Superseded By" value={showADREdit.superseded_by_id || ''} onChange={(e) => setShowADREdit({ ...showADREdit, superseded_by_id: e.target.value || null })}>
+              <option value="">None</option>
+              {adrs.filter(a => a.id !== showADREdit.id).map((a) => (
+                <option key={a.id} value={a.id}>ADR-{a.number}: {a.title}</option>
+              ))}
+            </Select>
             <Textarea label="Context" value={showADREdit.context} onChange={(e) => setShowADREdit({ ...showADREdit, context: e.target.value })} />
             <Textarea label="Decision" value={showADREdit.decision} onChange={(e) => setShowADREdit({ ...showADREdit, decision: e.target.value })} />
             <Textarea label="Consequences" value={showADREdit.consequences} onChange={(e) => setShowADREdit({ ...showADREdit, consequences: e.target.value })} />
             <div className="flex justify-end gap-3 pt-4">
               <Button type="button" variant="ghost" onClick={() => setShowADREdit(null)}>Cancel</Button>
-              <Button type="submit">Save</Button>
+              <Button type="submit" loading={updateADRMutation.isPending}>Save</Button>
             </div>
           </form>
         )}
@@ -366,9 +523,32 @@ export function Architecture() {
           <Textarea label="Check Config (JSON)" value={JSON.stringify(newFitness.check_config, null, 2)} onChange={(e) => setNewFitness({ ...newFitness, check_config: JSON.parse(e.target.value) })} className="font-mono text-xs" rows={6} />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setShowFitnessCreate(false)}>Cancel</Button>
-            <Button type="submit">Create</Button>
+            <Button type="submit" loading={createFitnessMutation.isPending}>Create</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!showFitnessEdit} onClose={() => setShowFitnessEdit(null)} title="Edit Fitness Function" size="lg">
+        {showFitnessEdit && (
+          <form onSubmit={handleUpdateFitness} className="space-y-4">
+            <Input label="Name" value={showFitnessEdit.name} onChange={(e) => setShowFitnessEdit({ ...showFitnessEdit, name: e.target.value })} />
+            <Input label="Description" value={showFitnessEdit.description || ''} onChange={(e) => setShowFitnessEdit({ ...showFitnessEdit, description: e.target.value })} />
+            <Select label="Severity" value={showFitnessEdit.severity} onChange={(e) => setShowFitnessEdit({ ...showFitnessEdit, severity: e.target.value as 'error' | 'warning' | 'info' })}>
+              {SEVERITY_OPTIONS.map((s) => (
+                <option key={s.value} value={s.value}>{s.label}</option>
+              ))}
+            </Select>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" checked={showFitnessEdit.is_active} onChange={(e) => setShowFitnessEdit({ ...showFitnessEdit, is_active: e.target.checked })} />
+              <span className="text-sm text-foundry-300">Active</span>
+            </div>
+            <Textarea label="Check Config (JSON)" value={JSON.stringify(showFitnessEdit.check_config, null, 2)} onChange={(e) => setShowFitnessEdit({ ...showFitnessEdit, check_config: JSON.parse(e.target.value) })} className="font-mono text-xs" rows={6} />
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="ghost" onClick={() => setShowFitnessEdit(null)}>Cancel</Button>
+              <Button type="submit" loading={updateFitnessMutation.isPending}>Save</Button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       <Modal open={showContextCreate} onClose={() => setShowContextCreate(false)} title="Create Bounded Context">
@@ -379,9 +559,63 @@ export function Architecture() {
           <Textarea label="Excludes" value={newContext.excludes} onChange={(e) => setNewContext({ ...newContext, excludes: e.target.value })} placeholder="e.g. User authentication, catalog" />
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setShowContextCreate(false)}>Cancel</Button>
-            <Button type="submit">Create</Button>
+            <Button type="submit" loading={createContextMutation.isPending}>Create</Button>
           </div>
         </form>
+      </Modal>
+
+      <Modal open={!!showContextEdit} onClose={() => setShowContextEdit(null)} title="Edit Bounded Context">
+        {showContextEdit && (
+          <form onSubmit={handleUpdateContext} className="space-y-4">
+            <Input label="Name" value={showContextEdit.name} onChange={(e) => setShowContextEdit({ ...showContextEdit, name: e.target.value })} />
+            <Input label="Description" value={showContextEdit.description || ''} onChange={(e) => setShowContextEdit({ ...showContextEdit, description: e.target.value })} />
+            <Textarea label="Includes" value={showContextEdit.includes || ''} onChange={(e) => setShowContextEdit({ ...showContextEdit, includes: e.target.value })} />
+            <Textarea label="Excludes" value={showContextEdit.excludes || ''} onChange={(e) => setShowContextEdit({ ...showContextEdit, excludes: e.target.value })} />
+            <div className="flex justify-end gap-3 pt-4">
+              <Button type="button" variant="ghost" onClick={() => setShowContextEdit(null)}>Cancel</Button>
+              <Button type="submit" loading={updateContextMutation.isPending}>Save</Button>
+            </div>
+          </form>
+        )}
+      </Modal>
+
+      <Modal open={showFitnessResults} onClose={() => setShowFitnessResults(false)} title="Fitness Run Results" size="lg">
+        {fitnessRunResult && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-4 gap-4">
+              <div className="p-3 bg-foundry-800 rounded text-center">
+                <div className="text-2xl font-mono font-bold text-emerald-400">{fitnessRunResult.passed}</div>
+                <div className="text-xs text-foundry-400">Passed</div>
+              </div>
+              <div className="p-3 bg-foundry-800 rounded text-center">
+                <div className="text-2xl font-mono font-bold text-red-400">{fitnessRunResult.failed}</div>
+                <div className="text-xs text-foundry-400">Failed</div>
+              </div>
+              <div className="p-3 bg-foundry-800 rounded text-center">
+                <div className="text-2xl font-mono font-bold text-amber-400">{fitnessRunResult.errors}</div>
+                <div className="text-xs text-foundry-400">Errors</div>
+              </div>
+              <div className="p-3 bg-foundry-800 rounded text-center">
+                <div className="text-2xl font-mono font-bold text-foundry-300">{fitnessRunResult.skipped}</div>
+                <div className="text-xs text-foundry-400">Skipped</div>
+              </div>
+            </div>
+            <div className="space-y-2 max-h-96 overflow-auto">
+              {fitnessRunResult.results.map((result, idx) => (
+                <div key={idx} className="p-3 bg-foundry-800 rounded">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium text-foundry-100">{result.function_name}</span>
+                    <Badge variant={result.result === 'pass' ? 'success' : result.result === 'fail' ? 'error' : result.result === 'error' ? 'error' : 'info'}>{result.result}</Badge>
+                  </div>
+                  {result.message && <p className="mt-1 text-sm text-foundry-400">{result.message}</p>}
+                  <div className="mt-1 text-xs text-foundry-400">
+                    Severity: {result.severity} | Duration: {result.duration_ms}ms
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </Modal>
 
       <Modal open={showContextBuilder} onClose={() => setShowContextBuilder(false)} title="AI Context Builder" size="xl">
@@ -414,7 +648,7 @@ export function Architecture() {
           </div>
           <div className="flex justify-end gap-3 pt-4">
             <Button type="button" variant="ghost" onClick={() => setShowContextBuilder(false)}>Cancel</Button>
-            <Button type="submit" loading={contextLoading}>Build Context</Button>
+            <Button type="submit" loading={buildContextMutation.isPending}>Build Context</Button>
           </div>
         </form>
         {contextOutput && (

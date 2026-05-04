@@ -95,6 +95,41 @@ export interface SpecVersionOut {
   created_at: string;
 }
 
+export interface FitnessRunResult {
+  function_id: string;
+  function_name: string;
+  result: 'pass' | 'fail' | 'error' | 'skipped';
+  severity: 'error' | 'warning' | 'info';
+  message: string | null;
+  details: Record<string, unknown>;
+  duration_ms: number;
+}
+
+export interface FitnessRunResponse {
+  project_id: string;
+  iteration_id: string | null;
+  results: FitnessRunResult[];
+  passed: number;
+  failed: number;
+  errors: number;
+  skipped: number;
+  run_at: string;
+}
+
+export interface APIKeyOut {
+  id: string;
+  name: string;
+  prefix: string;
+  created_at: string;
+  expires_at: string | null;
+  last_used_at: string | null;
+  is_active: boolean;
+}
+
+export interface APIKeyCreated extends APIKeyOut {
+  key: string;
+}
+
 export interface ADROut {
   id: string;
   project_id: string;
@@ -225,6 +260,13 @@ export const authApi = {
   
   refresh: (data: { refresh_token: string }) =>
     api.post<{ access_token: string; refresh_token: string; token_type: string; expires_in: number }>('/auth/refresh', data),
+  
+  apiKeys: {
+    list: () => api.get<APIKeyOut[]>('/auth/api-keys'),
+    create: (data: { name: string; expires_at?: string }) =>
+      api.post<APIKeyCreated>('/auth/api-keys', data),
+    delete: (keyId: string) => api.delete(`/auth/api-keys/${keyId}`),
+  },
 };
 
 export const projectsApi = {
@@ -243,7 +285,7 @@ export const projectsApi = {
 };
 
 export const specApi = {
-  list: (projectId: string, params?: { page?: number; page_size?: number; status?: string }) =>
+  list: (projectId: string, params?: { page?: number; page_size?: number; status?: string; format?: string; tag?: string; search?: string }) =>
     api.get<PaginatedResponse<SpecOut>>(`/projects/${projectId}/specs`, { params }),
   
   get: (projectId: string, id: string) => api.get<SpecOut>(`/projects/${projectId}/specs/${id}`),
@@ -255,6 +297,7 @@ export const specApi = {
     content: Record<string, unknown>;
     tags?: string[];
     bounded_context_id?: string;
+    linked_adr_ids?: string[];
     change_summary?: string;
   }) => api.post<SpecOut>(`/projects/${projectId}/specs`, data),
   
@@ -264,16 +307,23 @@ export const specApi = {
     content?: Record<string, unknown>;
     status?: string;
     tags?: string[];
+    linked_adr_ids?: string[];
+    bounded_context_id?: string;
+    change_summary?: string;
   }) => api.patch<SpecOut>(`/projects/${projectId}/specs/${id}`, data),
   
   delete: (projectId: string, id: string) => api.delete(`/projects/${projectId}/specs/${id}`),
   
   versions: (projectId: string, id: string) =>
     api.get<SpecVersionOut[]>(`/projects/${projectId}/specs/${id}/versions`),
+  
+  version: (projectId: string, id: string, versionNumber: number) =>
+    api.get<SpecVersionOut>(`/projects/${projectId}/specs/${id}/versions/${versionNumber}`),
 };
 
 export const adrApi = {
-  list: (projectId: string) => api.get<PaginatedResponse<ADROut>>(`/projects/${projectId}/adrs`),
+  list: (projectId: string, params?: { page?: number; page_size?: number; status?: string; tag?: string }) =>
+    api.get<PaginatedResponse<ADROut>>(`/projects/${projectId}/adrs`, { params }),
   
   get: (projectId: string, id: string) => api.get<ADROut>(`/projects/${projectId}/adrs/${id}`),
   
@@ -323,7 +373,7 @@ export const fitnessApi = {
   delete: (projectId: string, id: string) => api.delete(`/projects/${projectId}/fitness/${id}`),
   
   run: (projectId: string, data?: { function_ids?: string[]; iteration_id?: string }) =>
-    api.post<{ project_id: string; results: unknown[]; passed: number; failed: number; errors: number; run_at: string }>(
+    api.post<FitnessRunResponse>(
       `/projects/${projectId}/fitness/run`,
       data
     ),
@@ -395,7 +445,20 @@ export const loopApi = {
     adr_learnings?: string[];
   }) => api.put<IterationOut>(`/projects/${projectId}/iterations/${id}/reflection`, data),
   
+  abandon: (projectId: string, id: string) =>
+    api.post<IterationOut>(`/projects/${projectId}/iterations/${id}/abandon`),
+   
+  delete: (projectId: string, id: string) =>
+    api.delete(`/projects/${projectId}/iterations/${id}`),
+   
   checkpoints: (projectId: string, id: string) => api.get<CheckpointOut[]>(`/projects/${projectId}/iterations/${id}/checkpoints`),
+  
+  createCheckpoint: (projectId: string, iterationId: string, data: {
+    title: string;
+    description?: string;
+    stage: 'define' | 'generate' | 'validate' | 'ship' | 'reflect';
+    is_required?: boolean;
+  }) => api.post<CheckpointOut>(`/projects/${projectId}/iterations/${iterationId}/checkpoints`, data),
   
   resolveCheckpoint: (projectId: string, iterationId: string, checkpointId: string, data: {
     status: 'approved' | 'rejected' | 'skipped';
@@ -410,6 +473,9 @@ export const telemetryApi = {
   
   metrics: (projectId: string, iterationId: string) =>
     api.get<LoopMetricOut>(`/projects/${projectId}/telemetry/metrics/${iterationId}`),
+  
+  recomputeMetrics: (projectId: string, iterationId: string) =>
+    api.post<LoopMetricOut>(`/projects/${projectId}/telemetry/metrics/${iterationId}/recompute`),
   
   projectHealth: (projectId: string) => api.get<ProjectHealthOut>(`/projects/${projectId}/telemetry/health`),
 };

@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter, Navigate, Outlet, Routes, Route } from 'react-router-dom';
 import { AppShell } from './components/AppShell';
-import { Spinner } from './components/ui';
+import { Spinner, ToastProvider } from './components/ui';
 import { useAuthStore } from './stores';
 import { authApi } from './api/client';
 
@@ -13,6 +13,7 @@ const Intent = lazy(() => import('./pages/Intent').then((m) => ({ default: m.Int
 const Architecture = lazy(() => import('./pages/Architecture').then((m) => ({ default: m.Architecture })));
 const Loop = lazy(() => import('./pages/Loop').then((m) => ({ default: m.Loop })));
 const Telemetry = lazy(() => import('./pages/Telemetry').then((m) => ({ default: m.Telemetry })));
+const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
 
 function ProtectedLayout() {
   const { token, setUser, user } = useAuthStore();
@@ -34,31 +35,34 @@ function ProtectedLayout() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <Suspense fallback={
-        <div className="flex items-center justify-center h-screen bg-foundry-950">
-          <Spinner size="lg" />
-        </div>
-      }>
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          
-          <Route element={<ProtectedLayout />}>
-            <Route element={<AppShell><Outlet /></AppShell>}>
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/overview" element={<Overview />} />
-              <Route path="/intent" element={<Intent />} />
-              <Route path="/architecture" element={<Architecture />} />
-              <Route path="/loop" element={<Loop />} />
-              <Route path="/telemetry" element={<Telemetry />} />
+    <ToastProvider>
+      <BrowserRouter>
+        <Suspense fallback={
+          <div className="flex items-center justify-center h-screen bg-foundry-950">
+            <Spinner size="lg" />
+          </div>
+        }>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            
+            <Route element={<ProtectedLayout />}>
+              <Route element={<AppShell><Outlet /></AppShell>}>
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/overview" element={<Overview />} />
+                <Route path="/intent" element={<Intent />} />
+                <Route path="/architecture" element={<Architecture />} />
+                <Route path="/loop" element={<Loop />} />
+                <Route path="/telemetry" element={<Telemetry />} />
+                <Route path="/settings" element={<Settings />} />
+              </Route>
             </Route>
-          </Route>
-          
-          <Route path="*" element={<Navigate to="/projects" replace />} />
-        </Routes>
-      </Suspense>
-    </BrowserRouter>
+            
+            <Route path="*" element={<Navigate to="/projects" replace />} />
+          </Routes>
+        </Suspense>
+      </BrowserRouter>
+    </ToastProvider>
   );
 }
 

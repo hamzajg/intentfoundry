@@ -151,3 +151,97 @@ export function Card({ className, children, raised = false, onClick }: { classNa
 export function Divider({ className }: { className?: string }) {
   return <div className={clsx('divider', className)} />;
 }
+
+interface ToastItem {
+  id: string;
+  type: 'success' | 'error' | 'info' | 'warning';
+  title: string;
+  message?: string;
+}
+
+interface ToastContextValue {
+  toasts: ToastItem[];
+  addToast: (toast: Omit<ToastItem, 'id'>) => void;
+  removeToast: (id: string) => void;
+}
+
+import { createContext, useContext, useState, useCallback } from 'react';
+
+const ToastContext = createContext<ToastContextValue | null>(null);
+
+export function ToastProvider({ children }: { children: ReactNode }) {
+  const [toasts, setToasts] = useState<ToastItem[]>([]);
+
+  const addToast = useCallback((toast: Omit<ToastItem, 'id'>) => {
+    const id = Math.random().toString(36).slice(2);
+    setToasts(prev => [...prev, { ...toast, id }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+  }, []);
+
+  const removeToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  return (
+    <ToastContext.Provider value={{ toasts, addToast, removeToast }}>
+      {children}
+      <div className="fixed top-4 right-4 z-[100] flex flex-col gap-2 w-80">
+        {toasts.map(toast => (
+          <div
+            key={toast.id}
+            className={clsx(
+              'p-4 rounded border shadow-lg bg-foundry-800 animate-slide-in',
+              {
+                'border-emerald-500/50': toast.type === 'success',
+                'border-red-500/50': toast.type === 'error',
+                'border-amber-500/50': toast.type === 'warning',
+                'border-blue-500/50': toast.type === 'info',
+              }
+            )}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <div className={clsx('text-sm font-medium', {
+                  'text-emerald-300': toast.type === 'success',
+                  'text-red-300': toast.type === 'error',
+                  'text-amber-300': toast.type === 'warning',
+                  'text-blue-300': toast.type === 'info',
+                })}>{toast.title}</div>
+                {toast.message && <div className="mt-1 text-xs text-foundry-400">{toast.message}</div>}
+              </div>
+              <button onClick={() => removeToast(toast.id)} className="text-foundry-400 hover:text-foundry-100 ml-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </ToastContext.Provider>
+  );
+}
+
+export function useToast() {
+  const ctx = useContext(ToastContext);
+  if (!ctx) throw new Error('useToast must be used within ToastProvider');
+  return ctx;
+}
+
+export function useApiToast() {
+  const { addToast } = useToast();
+  return {
+    success: (title: string, message?: string) => addToast({ type: 'success', title, message }),
+    error: (title: string, message?: string) => addToast({ type: 'error', title, message }),
+    info: (title: string, message?: string) => addToast({ type: 'info', title, message }),
+    warning: (title: string, message?: string) => addToast({ type: 'warning', title, message }),
+    catch: (e: unknown, fallbackTitle = 'Operation failed') => {
+      const msg = e && typeof e === 'object' && 'response' in e
+        ? ((e as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : e && typeof e === 'object' && 'message' in e
+          ? (e as { message?: string }).message
+          : 'An unexpected error occurred';
+      addToast({ type: 'error', title: fallbackTitle, message: msg as string });
+    },
+  };
+}

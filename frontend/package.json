@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "^5.59.0",
+    "@tanstack/react-query-devtools": "^5.100.9",
     "axios": "^1.7.7",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
@@ -19,6 +20,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.28.0",
     "recharts": "^2.13.3",
+    "zod": "^4.4.3",
     "zustand": "^5.0.1"
   },
   "devDependencies": {
