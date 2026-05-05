@@ -9,6 +9,7 @@ from app.api.v1.endpoints.intent import router as intent_router
 from app.api.v1.endpoints.architecture import router as architecture_router
 from app.api.v1.endpoints.loop import router as loop_router
 from app.api.v1.endpoints.telemetry import router as telemetry_router
+from app.api.v1.endpoints.canvas import router as canvas_router
 
 api_router = APIRouter()
 
@@ -18,3 +19,4 @@ api_router.include_router(intent_router)
 api_router.include_router(architecture_router)
 api_router.include_router(loop_router)
 api_router.include_router(telemetry_router)
+api_router.include_router(canvas_router)

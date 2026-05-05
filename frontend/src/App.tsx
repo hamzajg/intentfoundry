@@ -13,6 +13,7 @@ const Overview = lazy(() => import('./pages/Overview').then((m) => ({ default: m
 const Intent = lazy(() => import('./pages/Intent').then((m) => ({ default: m.Intent })));
 const Architecture = lazy(() => import('./pages/Architecture').then((m) => ({ default: m.Architecture })));
 const Loop = lazy(() => import('./pages/Loop').then((m) => ({ default: m.Loop })));
+const Canvas = lazy(() => import('./pages/Canvas').then((m) => ({ default: m.Canvas })));
 const Telemetry = lazy(() => import('./pages/Telemetry').then((m) => ({ default: m.Telemetry })));
 const Settings = lazy(() => import('./pages/Settings').then((m) => ({ default: m.Settings })));
 
@@ -58,6 +59,7 @@ function App() {
                 <Route path="/telemetry" element={<Telemetry />} />
                 <Route path="/settings" element={<Settings />} />
               </Route>
+              <Route path="/canvas" element={<Canvas />} />
             </Route>
             
             <Route path="*" element={<Navigate to="/" replace />} />

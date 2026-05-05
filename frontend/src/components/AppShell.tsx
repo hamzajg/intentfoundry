@@ -7,6 +7,7 @@ const NAV_ITEMS = [
   { path: '/intent', label: 'Intent', icon: '◎' },
   { path: '/architecture', label: 'Architecture', icon: '⚙' },
   { path: '/loop', label: 'Loop', icon: '⟳' },
+  { path: '/canvas', label: 'Canvas', icon: '◫' },
   { path: '/telemetry', label: 'Telemetry', icon: '▦' },
   { path: '/settings', label: 'Settings', icon: '⚑' },
 ];
