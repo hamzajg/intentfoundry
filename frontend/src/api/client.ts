@@ -21,6 +21,21 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 api.interceptors.response.use(
   (response) => response,
   async (error: AxiosError) => {
+    // Handle offline - queue for retry when online
+    if (!navigator.onLine) {
+      const originalRequest = error.config;
+      if (originalRequest) {
+        // Store the failed request for later retry
+        const pendingKey = `pending_${Date.now()}`;
+        sessionStorage.setItem(pendingKey, JSON.stringify({
+          url: originalRequest.url,
+          method: originalRequest.method,
+          data: originalRequest.data,
+        }));
+      }
+      return Promise.reject(new Error('offline'));
+    }
+    
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
     if (error.response?.status === 401 && originalRequest && !originalRequest._retry) {
       originalRequest._retry = true;

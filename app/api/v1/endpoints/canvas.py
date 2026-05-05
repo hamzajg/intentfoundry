@@ -12,7 +12,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1.deps import get_current_user, get_session
+from app.api.v1.deps import get_current_user, DB
 from app.models.domain import Project, User
 
 router = APIRouter(prefix="/projects/{project_id}/canvas", tags=["canvas"])
@@ -71,7 +71,7 @@ _canvases: dict[str, dict[str, Any]] = {}
 @router.get("", response_model=CanvasOut)
 async def get_canvas(
     project_id: str,
-    db: AsyncSession = Depends(get_session),
+    db: DB,
     user: User = Depends(get_current_user),
 ) -> CanvasOut:
     project = await db.get(Project, project_id)
@@ -91,7 +91,7 @@ async def get_canvas(
 async def save_canvas(
     project_id: str,
     data: CanvasSaveIn,
-    db: AsyncSession = Depends(get_session),
+    db: DB,
     user: User = Depends(get_current_user),
 ) -> CanvasOut:
     project = await db.get(Project, project_id)
@@ -118,7 +118,7 @@ async def save_canvas(
 @router.delete("")
 async def delete_canvas(
     project_id: str,
-    db: AsyncSession = Depends(get_session),
+    db: DB,
     user: User = Depends(get_current_user),
 ) -> dict[str, str]:
     project = await db.get(Project, project_id)
@@ -164,7 +164,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-@router.websocket("/ws/{project_id}")
+@router.websocket("/ws")
 async def canvas_websocket(
     websocket: WebSocket,
     project_id: str,

@@ -117,9 +117,14 @@ def create_app() -> FastAPI:
     # Routers
     app.include_router(api_router, prefix=settings.api_prefix)
 
-    # Root API endpoint
+    # Root API endpoint - serve frontend HTML
     @app.get("/", tags=["system"], include_in_schema=False)
     async def root():
+        static_dir = Path(__file__).parent / "static"
+        index_file = static_dir / "index.html"
+        if index_file.exists():
+            from fastapi.responses import HTMLResponse
+            return HTMLResponse(content=index_file.read_text())
         return {
             "name": "IntentFoundry API",
             "version": settings.app_version,
@@ -146,12 +151,15 @@ def create_app() -> FastAPI:
         # Mount JS/CSS assets at /assets so they are served directly
         assets_dir = static_dir / "assets"
         if assets_dir.exists():
-            app.mount("/assets", StaticFiles(directory=str(assets_dir)), name="assets")
+            app.mount("/assets", StaticFiles(directory=str(assets_dir)))
 
         # Catch-all SPA fallback — serves index.html for any path that
         # doesn't match an API route or a mounted static asset.
         @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa_fallback(full_path: str):
+            # Don't serve SPA for API routes
+            if full_path.startswith("api/"):
+                return JSONResponse(status_code=404, content={"detail": "Not found"})
             index_file = static_dir / "index.html"
             if index_file.exists():
                 return HTMLResponse(content=index_file.read_text())

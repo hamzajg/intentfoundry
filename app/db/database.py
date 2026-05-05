@@ -29,8 +29,6 @@ NAMING_CONVENTION: dict[str, str] = {
 engine = create_async_engine(
     settings.database_url,
     echo=settings.database_echo,
-    pool_size=settings.database_pool_size if "postgresql" in settings.database_url else 1,
-    max_overflow=settings.database_max_overflow if "postgresql" in settings.database_url else 0,
     pool_pre_ping=True,
 )
 

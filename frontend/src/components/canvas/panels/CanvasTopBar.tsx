@@ -7,13 +7,16 @@ export function CanvasTopBar() {
   const { syncStatus, loadCanvas, autoLayout, clearCanvas } = useCanvasStore();
   const { activeProject } = useProjectStore();
 
-  const syncIndicator = {
+  const indicatorMap: Record<string, { color: string; label: string }> = {
     idle: { color: '#7a8a9a', label: 'Idle' },
     loading: { color: '#f59e0b', label: 'Loading...' },
     syncing: { color: '#f59e0b', label: 'Syncing...' },
     error: { color: '#ef4444', label: 'Error' },
-    loaded: { color: '#10b981', label: 'Loaded' },
-  }[syncStatus];
+    loaded: { color: '#10b981', label: 'Synced' },
+    offline: { color: '#f97316', label: 'Offline' },
+    pending: { color: '#f59e0b', label: 'Pending' },
+  };
+  const syncIndicator = indicatorMap[syncStatus] || indicatorMap.idle;
 
   return (
     <div

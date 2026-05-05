@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 import {
   type Node,
   type Edge,
@@ -107,8 +108,46 @@ export interface CanvasNodeData {
   description?: string;
   color?: string;
   metadata?: Record<string, unknown>;
+  // Drill-down support
+  isContainer?: boolean;
+  internalNodes?: Node<CanvasNodeData>[];
+  internalEdges?: Edge[];
+  childCount?: number;
   [key: string]: unknown;
 }
+
+export interface Breadcrumb {
+  id: string;
+  label: string;
+}
+
+export type SyncStatus = 'idle' | 'loading' | 'syncing' | 'error' | 'loaded' | 'offline' | 'pending';
+
+export interface SyncQueueItem {
+  id: string;
+  type: 'node_add' | 'node_update' | 'node_delete' | 'edge_add' | 'edge_delete';
+  payload: unknown;
+  timestamp: number;
+  retryCount: number;
+}
+
+export interface DrillState {
+  currentNodeId: string | null;
+  breadcrumbs: Breadcrumb[];
+  isTransitioning: boolean;
+  transitionTargetNode: string | null;
+  
+  drillIn: (node: Node<CanvasNodeData>) => void;
+  drillOut: () => void;
+  drillToBreadcrumb: (index: number) => void;
+  setTransitioning: (transitioning: boolean) => void;
+}
+
+const CONTAINER_TYPES: CanvasNodeType[] = [
+  'spec', 'adr', 'context', 'iteration', 'group',
+  'bounded-context', 'container', 'bpmn-subprocess',
+  'mindmap-root', 'journey-stage'
+];
 
 export interface Collaborator {
   id: string;
@@ -148,11 +187,32 @@ interface CanvasState {
   paletteCollapsed: boolean;
   setPaletteCollapsed: (collapsed: boolean) => void;
 
-  syncStatus: 'idle' | 'loading' | 'syncing' | 'error' | 'loaded';
-  setSyncStatus: (status: 'idle' | 'loading' | 'syncing' | 'error' | 'loaded') => void;
+  syncStatus: SyncStatus;
+  setSyncStatus: (status: SyncStatus) => void;
 
   collaborators: Map<string, Collaborator>;
   setCollaborators: (collabs: Map<string, Collaborator>) => void;
+
+  // Offline support
+  isOnline: boolean;
+  setOnline: (online: boolean) => void;
+  syncQueue: SyncQueueItem[];
+  addToSyncQueue: (item: Omit<SyncQueueItem, 'id' | 'timestamp' | 'retryCount'>) => void;
+  removeFromSyncQueue: (id: string) => void;
+  processSyncQueue: () => Promise<void>;
+  lastSyncedAt: number | null;
+  setLastSyncedAt: (timestamp: number | null) => void;
+
+  // Drill-down state
+  currentNodeId: string | null;
+  breadcrumbs: Breadcrumb[];
+  isTransitioning: boolean;
+  transitionTargetNode: string | null;
+  setTransitioning: (transitioning: boolean, targetNode?: string | null) => void;
+  drillIn: (node: Node<CanvasNodeData>) => void;
+  drillOut: () => void;
+  drillToBreadcrumb: (index: number) => void;
+  isContainerNode: (type: CanvasNodeType | string) => boolean;
 
   setMode: (mode: CanvasMode) => void;
   loadCanvas: (projectId: string) => Promise<void>;
@@ -170,29 +230,48 @@ function uniqueId() {
   return `canvas-node-${nodeCounter}-${Date.now()}`;
 }
 
-export const useCanvasStore = create<CanvasState>((set, get) => ({
-  mode: 'default',
-  nodes: [],
-  edges: [],
+export const useCanvasStore = create<CanvasState>()(
+  persist(
+    (set, get) => ({
+      mode: 'default',
+      nodes: [],
+      edges: [],
 
-  onNodesChange: (changes) => {
-    set({ nodes: applyNodeChanges(changes, get().nodes) as Node<CanvasNodeData>[] });
-  },
+      onNodesChange: (changes) => {
+        const updatedNodes = applyNodeChanges(changes, get().nodes) as Node<CanvasNodeData>[];
+        set({ nodes: updatedNodes });
+        
+        // Queue changes for sync when offline
+        changes.forEach(change => {
+          if ('type' in change && change.type === 'position') {
+            get().addToSyncQueue({
+              type: 'node_update',
+              payload: { id: (change as any).id, position: (change as any).position },
+            });
+          }
+        });
+      },
 
-  onEdgesChange: (changes) => {
-    set({ edges: applyEdgeChanges(changes, get().edges) });
-  },
+      onEdgesChange: (changes) => {
+        set({ edges: applyEdgeChanges(changes, get().edges) });
+      },
 
-  onConnect: (connection) => {
-    const newEdge: Edge = {
-      ...connection,
-      id: `e-${connection.source}-${connection.target}`,
-      type: 'custom',
-      animated: true,
-      style: { stroke: '#00d4ff', strokeWidth: 2 },
-    };
-    set({ edges: addEdge(newEdge, get().edges) });
-  },
+      onConnect: (connection) => {
+        const newEdge: Edge = {
+          ...connection,
+          id: `e-${connection.source}-${connection.target}`,
+          type: 'custom',
+          animated: true,
+          style: { stroke: '#00d4ff', strokeWidth: 2 },
+        };
+        const updatedEdges = addEdge(newEdge, get().edges);
+        set({ edges: updatedEdges });
+        
+        get().addToSyncQueue({
+          type: 'edge_add',
+          payload: connection,
+        });
+      },
 
   selectedNodeId: null,
   setSelectedNode: (id) => {
@@ -441,4 +520,212 @@ export const useCanvasStore = create<CanvasState>((set, get) => ({
     };
     set({ nodes: [...get().nodes, newNode], selectedNodeId: id, rightPanelOpen: true });
   },
-}));
+
+  // Drill-down implementation
+  currentNodeId: null,
+  breadcrumbs: [],
+  isTransitioning: false,
+  transitionTargetNode: null,
+
+  setTransitioning: (transitioning, targetNode = null) => {
+    set({ isTransitioning: transitioning, transitionTargetNode: targetNode });
+  },
+
+  isContainerNode: (type) => {
+    return CONTAINER_TYPES.includes(type as CanvasNodeType);
+  },
+
+  drillIn: (node) => {
+    const state = get();
+    if (!state.isContainerNode(node.type || 'unknown')) return;
+    
+    // Add to breadcrumbs
+    const newBreadcrumb: Breadcrumb = { id: node.id, label: node.data.label };
+    const newBreadcrumbs = [...state.breadcrumbs, newBreadcrumb];
+    
+    // Initialize internal canvas if not exists
+    const internalNodes = node.data.internalNodes || [];
+    const internalEdges = node.data.internalEdges || [];
+    
+    // Set transitioning state
+    set({
+      isTransitioning: true,
+      transitionTargetNode: node.id,
+      currentNodeId: node.id,
+      breadcrumbs: newBreadcrumbs,
+      // Load internal content or initialize empty
+      nodes: internalNodes.length > 0 ? internalNodes : [],
+      edges: internalEdges.length > 0 ? internalEdges : [],
+      selectedNodeId: null,
+      rightPanelOpen: false,
+    });
+    
+    // Clear transitioning state after animation
+    setTimeout(() => {
+      set({ isTransitioning: false, transitionTargetNode: null });
+    }, 300);
+  },
+
+  drillOut: () => {
+    const state = get();
+    if (state.breadcrumbs.length === 0) return;
+    
+    const parentBreadcrumb = state.breadcrumbs[state.breadcrumbs.length - 2];
+    const currentNodeId = state.currentNodeId;
+    
+    // Save current internal canvas to parent before drilling out
+    if (currentNodeId) {
+      const currentNodes = state.nodes;
+      const currentEdges = state.edges;
+      
+      // Update parent's internal nodes
+      set({
+        nodes: get().nodes.map((n) => {
+          if (n.id === currentNodeId) {
+            return {
+              ...n,
+              data: {
+                ...n.data,
+                internalNodes: currentNodes,
+                internalEdges: currentEdges,
+                childCount: currentNodes.length,
+                isContainer: true,
+              },
+            };
+          }
+          return n;
+        }),
+      });
+    }
+    
+    if (!parentBreadcrumb) {
+      // Return to root canvas (reload from API)
+      set({
+        currentNodeId: null,
+        breadcrumbs: [],
+        isTransitioning: false,
+        transitionTargetNode: null,
+      });
+    } else {
+      // Navigate to parent
+      const parentNode = state.nodes.find((n) => n.id === parentBreadcrumb.id);
+      if (parentNode) {
+        set({
+          currentNodeId: parentBreadcrumb.id,
+          breadcrumbs: state.breadcrumbs.slice(0, -1),
+          nodes: parentNode.data.internalNodes || [],
+          edges: parentNode.data.internalEdges || [],
+          isTransitioning: true,
+          transitionTargetNode: parentBreadcrumb.id,
+        });
+        
+        setTimeout(() => {
+          set({ isTransitioning: false, transitionTargetNode: null });
+        }, 300);
+      }
+    }
+  },
+
+  drillToBreadcrumb: (index) => {
+    const state = get();
+    if (index >= state.breadcrumbs.length) return;
+    
+    const targetBreadcrumb = state.breadcrumbs[index];
+    const targetNode = state.nodes.find((n) => n.id === targetBreadcrumb.id);
+    
+    if (!targetNode) return;
+    
+    set({
+      currentNodeId: targetBreadcrumb.id,
+      breadcrumbs: state.breadcrumbs.slice(0, index + 1),
+      nodes: targetNode.data.internalNodes || [],
+      edges: targetNode.data.internalEdges || [],
+      isTransitioning: true,
+      transitionTargetNode: targetBreadcrumb.id,
+    });
+    
+    setTimeout(() => {
+      set({ isTransitioning: false, transitionTargetNode: null });
+    }, 300);
+  },
+
+  // Offline support
+  isOnline: typeof navigator !== 'undefined' ? navigator.onLine : true,
+  setOnline: (online) => set({ isOnline: online }),
+  
+  syncQueue: [],
+  lastSyncedAt: null,
+  
+  addToSyncQueue: (item) => {
+    const state = get();
+    const queueItem: SyncQueueItem = {
+      ...item,
+      id: `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      timestamp: Date.now(),
+      retryCount: 0,
+    };
+    set({ syncQueue: [...state.syncQueue, queueItem] });
+    
+    if (state.isOnline) {
+      state.processSyncQueue();
+    }
+  },
+  
+  removeFromSyncQueue: (id) => {
+    set({ syncQueue: get().syncQueue.filter(item => item.id !== id) });
+  },
+  
+  processSyncQueue: async () => {
+    const state = get();
+    if (!state.isOnline || state.syncQueue.length === 0) return;
+    
+    set({ syncStatus: 'syncing' });
+    
+    for (const item of state.syncQueue) {
+      try {
+        switch (item.type) {
+          case 'node_add':
+            break;
+          case 'node_update':
+            break;
+          case 'node_delete':
+            break;
+          case 'edge_add':
+            break;
+          case 'edge_delete':
+            break;
+        }
+        set({ syncQueue: get().syncQueue.filter(i => i.id !== item.id) });
+      } catch {
+        if (item.retryCount < 3) {
+          set({
+            syncQueue: get().syncQueue.map(i => 
+              i.id === item.id ? { ...i, retryCount: i.retryCount + 1 } : i
+            ),
+          });
+        } else {
+          set({ syncQueue: get().syncQueue.filter(i => i.id !== item.id) });
+        }
+      }
+    }
+    
+    set({ 
+      syncStatus: 'loaded',
+      lastSyncedAt: Date.now() 
+    });
+  },
+  
+  setLastSyncedAt: (timestamp) => set({ lastSyncedAt: timestamp }),
+    }),
+    {
+      name: 'intentfoundry-canvas',
+      storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({
+        nodes: state.nodes,
+        edges: state.edges,
+        mode: state.mode,
+        lastSyncedAt: state.lastSyncedAt,
+      }),
+    }
+  )
+);
