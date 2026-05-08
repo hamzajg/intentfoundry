@@ -1,10 +1,11 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect, useState } from 'react';
 import {
   ReactFlow,
   Background,
   Controls,
   MiniMap,
   ReactFlowProvider,
+  useReactFlow,
   type NodeMouseHandler,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
@@ -84,6 +85,143 @@ const edgeTypes = {
   custom: CustomEdge,
 };
 
+// Breadcrumb Component
+function BreadcrumbNav() {
+  const { breadcrumbs, drillToBreadcrumb, drillOut } = useCanvasStore();
+  
+  if (breadcrumbs.length === 0) return null;
+  
+  return (
+    <div style={{
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '8px 16px',
+      background: '#0f172a',
+      borderBottom: '1px solid #1e293b',
+      fontSize: 13,
+    }}>
+      <button
+        onClick={() => drillToBreadcrumb(0)}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#94a3b8',
+          cursor: 'pointer',
+          fontSize: 13,
+        }}
+      >
+        Root
+      </button>
+      {breadcrumbs.map((crumb, idx) => (
+        <span key={crumb.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: '#475569' }}>›</span>
+          {idx < breadcrumbs.length - 1 ? (
+            <button
+              onClick={() => drillToBreadcrumb(idx)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#64748b',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              {crumb.label.length > 15 ? crumb.label.slice(0, 15) + '...' : crumb.label}
+            </button>
+          ) : (
+            <span style={{ color: '#f59e0b', fontWeight: 500 }}>
+              {crumb.label.length > 20 ? crumb.label.slice(0, 20) + '...' : crumb.label}
+            </span>
+          )}
+        </span>
+      ))}
+      <button
+        onClick={drillOut}
+        style={{
+          marginLeft: 'auto',
+          background: '#1e293b',
+          border: '1px solid #334155',
+          color: '#94a3b8',
+          padding: '4px 12px',
+          borderRadius: 4,
+          cursor: 'pointer',
+          fontSize: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 4,
+        }}
+      >
+        ← Back
+      </button>
+    </div>
+  );
+}
+
+// Zoom indicator component
+function ZoomIndicator() {
+  const { zoomIn, zoomOut, getViewport } = useReactFlow();
+  const [zoom, setZoom] = useState(100);
+  
+  useEffect(() => {
+    const handleZoom = () => {
+      const vp = getViewport();
+      setZoom(Math.round(vp.zoom * 100));
+    };
+    handleZoom();
+    const interval = setInterval(handleZoom, 500);
+    return () => clearInterval(interval);
+  }, [getViewport]);
+  
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: 20,
+      left: 20,
+      display: 'flex',
+      alignItems: 'center',
+      gap: 8,
+      padding: '6px 12px',
+      background: '#0f172a',
+      border: '1px solid #1e293b',
+      borderRadius: 6,
+      fontSize: 12,
+      color: '#64748b',
+      fontFamily: 'monospace',
+      zIndex: 10,
+      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+    }}>
+      <button
+        onClick={() => zoomOut()}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#94a3b8',
+          cursor: 'pointer',
+          fontSize: 16,
+          padding: '0 4px',
+        }}
+      >
+        −
+      </button>
+      <span style={{ minWidth: 45, textAlign: 'center' }}>{zoom}%</span>
+      <button
+        onClick={() => zoomIn()}
+        style={{
+          background: 'none',
+          border: 'none',
+          color: '#94a3b8',
+          cursor: 'pointer',
+          fontSize: 16,
+          padding: '0 4px',
+        }}
+      >
+        +
+      </button>
+    </div>
+  );
+}
+
 function CanvasContent() {
   const {
     nodes,
@@ -94,13 +232,49 @@ function CanvasContent() {
     setSelectedNode,
     addNode,
     mode,
+    drillIn,
+    drillOut,
+    isContainerNode,
+    isTransitioning,
+    breadcrumbs,
   } = useCanvasStore();
-
+  
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
+  const lastClickTime = useRef<number>(0);
 
-  const handleNodeClick: NodeMouseHandler = useCallback((_event, node) => {
-    setSelectedNode(node.id);
-  }, [setSelectedNode]);
+  // Handle node click - single click selects, double click drills
+  const handleNodeClick: NodeMouseHandler = useCallback((_, node) => {
+    const currentTime = Date.now();
+    const timeDiff = currentTime - lastClickTime.current;
+    
+    if (timeDiff < 300 && isContainerNode(node.type || '')) {
+      // Double click - drill in
+      drillIn(node as any);
+      lastClickTime.current = 0;
+    } else {
+      // Single click - select
+      setSelectedNode(node.id);
+      lastClickTime.current = currentTime;
+    }
+  }, [setSelectedNode, drillIn, isContainerNode]);
+
+  // Handle double click on canvas to drill out
+  const handlePaneClick = useCallback(() => {
+    if (breadcrumbs.length > 0) {
+      drillOut();
+    }
+  }, [drillOut, breadcrumbs]);
+
+  // Keyboard handler for ESC to drill out
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && breadcrumbs.length > 0) {
+        drillOut();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [drillOut, breadcrumbs]);
 
   const handleDragOver = useCallback((event: React.DragEvent) => {
     event.preventDefault();
@@ -127,6 +301,11 @@ function CanvasContent() {
     [addNode]
   );
 
+  // Handle viewport change for drill animation
+  const handleMoveEnd = useCallback(() => {
+    // Could trigger save or other side effects
+  }, []);
+
   const defaultEdgeOptions = {
     style: { stroke: '#00d4ff', strokeWidth: 2 },
     type: 'custom',
@@ -139,9 +318,21 @@ function CanvasContent() {
       ? { color: '#1e293b', gap: 16, size: 0.5, offset: 200 }
       : { color: '#1e293b', gap: 24, size: 1 };
 
+  // Drill transition animation style
+  const transitionStyle = isTransitioning
+    ? {
+      transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+      opacity: 0.7,
+      transform: 'scale(0.95)',
+    }
+    : {
+      transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
+    };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', width: '100vw' }}>
       <CanvasTopBar />
+      <BreadcrumbNav />
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         <NodePalette />
         <div ref={reactFlowWrapper} style={{ flex: 1, position: 'relative' }}>
@@ -152,14 +343,19 @@ function CanvasContent() {
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onNodeClick={handleNodeClick}
+            onPaneClick={handlePaneClick}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
+            onMoveEnd={handleMoveEnd}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
             defaultEdgeOptions={defaultEdgeOptions}
-            fitView
+            fitView={!isTransitioning}
             fitViewOptions={{ padding: 0.2 }}
-            style={{ background: '#0c1220' }}
+            style={{ 
+              background: '#0c1220',
+              ...transitionStyle,
+            }}
             proOptions={{ hideAttribution: true }}
           >
             <Background
@@ -177,6 +373,7 @@ function CanvasContent() {
               }}
               showInteractive={false}
             />
+<ZoomIndicator />
             <MiniMap
               nodeStrokeWidth={3}
               zoomable

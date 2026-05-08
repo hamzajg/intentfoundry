@@ -5,12 +5,14 @@ import { specApi, adrApi, contextApi, fitnessApi } from '../../../api/client';
 import { useProjectStore } from '../../../stores';
 
 export function DetailPanel() {
-  const { selectedNodeId, nodes, setSelectedNode, rightPanelOpen, syncStatus, loadCanvas, autoLayout } = useCanvasStore();
+  const { selectedNodeId, nodes, setSelectedNode, rightPanelOpen, syncStatus, loadCanvas, autoLayout, drillIn, isContainerNode } = useCanvasStore();
   const { activeProject } = useProjectStore();
 
-  const node = nodes.find((n) => n.id === selectedNodeId);
+  const selectedNode = nodes.find((n) => n.id === selectedNodeId);
+  const isNodeContainer = selectedNode && isContainerNode(selectedNode.type || '');
+  const childrenCount = selectedNode?.data?.childCount || selectedNode?.data?.internalNodes?.length || 0;
 
-  if (!rightPanelOpen || !node) {
+  if (!rightPanelOpen || !selectedNode) {
     return (
       <div
         style={{
@@ -103,7 +105,7 @@ export function DetailPanel() {
             letterSpacing: '0.05em',
           }}
         >
-          {node.type} Details
+          {selectedNode.type} Details
         </span>
         <button
           onClick={() => setSelectedNode(null)}
@@ -126,13 +128,28 @@ export function DetailPanel() {
       </div>
 
       <div style={{ flex: 1, overflow: 'auto', padding: 16 }}>
-        <NodeDetailContent node={node} />
+        <NodeDetailContent 
+          node={selectedNode} 
+          isContainer={isNodeContainer} 
+          childCount={childrenCount}
+          onDrillIn={() => drillIn(selectedNode as any)}
+        />
       </div>
     </div>
   );
 }
 
-function NodeDetailContent({ node }: { node: { id: string; type?: string; data: { label: string; entity?: unknown; status?: string; format?: string } } }) {
+function NodeDetailContent({ 
+  node, 
+  isContainer, 
+  childCount,
+  onDrillIn,
+}: { 
+  node: { id: string; type?: string; data: { label: string; entity?: unknown; status?: string; format?: string } };
+  isContainer?: boolean;
+  childCount?: number;
+  onDrillIn?: () => void;
+}) {
   const { activeProject } = useProjectStore();
   const apiToast = useApiToast();
   const { deleteNode } = useCanvasStore();
@@ -234,6 +251,16 @@ function NodeDetailContent({ node }: { node: { id: string; type?: string; data: 
         <Button variant="primary" size="sm" onClick={handleSave} style={{ flex: 1 }}>
           Save
         </Button>
+        {isContainer && onDrillIn && (
+          <Button 
+            variant="primary" 
+            size="sm" 
+            onClick={onDrillIn}
+            style={{ flex: 1 }}
+          >
+            Drill In → {childCount && childCount > 0 ? `(${childCount})` : ''}
+          </Button>
+        )}
         <Button variant="danger" size="sm" onClick={handleDelete}>
           Delete
         </Button>
