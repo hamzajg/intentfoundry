@@ -87,7 +87,7 @@ const edgeTypes = {
 
 // Breadcrumb Component
 function BreadcrumbNav() {
-  const { breadcrumbs, drillToBreadcrumb, drillOut } = useCanvasStore();
+  const { breadcrumbs, drillToBreadcrumb, drillToRoot, drillOut } = useCanvasStore();
   
   if (breadcrumbs.length === 0) return null;
   
@@ -102,7 +102,7 @@ function BreadcrumbNav() {
       fontSize: 13,
     }}>
       <button
-        onClick={() => drillToBreadcrumb(0)}
+        onClick={() => drillToRoot()}
         style={{
           background: 'none',
           border: 'none',
@@ -237,8 +237,11 @@ function CanvasContent() {
     isContainerNode,
     isTransitioning,
     breadcrumbs,
+    setViewport,
+    viewport,
   } = useCanvasStore();
   
+  const { getViewport } = useReactFlow();
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const lastClickTime = useRef<number>(0);
 
@@ -301,10 +304,11 @@ function CanvasContent() {
     [addNode]
   );
 
-  // Handle viewport change for drill animation
+  // Handle viewport change for auto-save
   const handleMoveEnd = useCallback(() => {
-    // Could trigger save or other side effects
-  }, []);
+    const vp = getViewport();
+    setViewport({ x: vp.x, y: vp.y, zoom: vp.zoom });
+  }, [getViewport, setViewport]);
 
   const defaultEdgeOptions = {
     style: { stroke: '#00d4ff', strokeWidth: 2 },
@@ -346,6 +350,7 @@ function CanvasContent() {
             onPaneClick={handlePaneClick}
             onDrop={handleDrop}
             onDragOver={handleDragOver}
+            defaultViewport={viewport}
             onMoveEnd={handleMoveEnd}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}

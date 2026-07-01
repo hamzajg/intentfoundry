@@ -2,13 +2,11 @@ import { api } from './client';
 import type { Node, Edge } from '@xyflow/react';
 
 export interface CanvasLayout {
-  id: string;
   project_id: string;
   nodes: Node[];
   edges: Edge[];
-  viewport: { x: number; y: number; zoom: number };
-  created_at: string;
-  updated_at: string;
+  viewport?: { x: number; y: number; zoom: number } | null;
+  updated_at?: string | null;
 }
 
 export const canvasApi = {

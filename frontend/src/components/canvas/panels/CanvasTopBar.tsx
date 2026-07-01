@@ -4,7 +4,7 @@ import { Button } from '../../ui';
 import { ModeSelector } from './ModeSelector';
 
 export function CanvasTopBar() {
-  const { syncStatus, loadCanvas, autoLayout, clearCanvas } = useCanvasStore();
+  const { syncStatus, loadCanvas, autoLayout, clearCanvas, saveCanvas } = useCanvasStore();
   const { activeProject } = useProjectStore();
 
   const indicatorMap: Record<string, { color: string; label: string }> = {
@@ -45,6 +45,15 @@ export function CanvasTopBar() {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => activeProject && saveCanvas(activeProject.id)}
+          loading={syncStatus === 'syncing'}
+          style={{ fontSize: 11, padding: '4px 12px', minHeight: 30 }}
+        >
+          Save
+        </Button>
         <Button
           variant="ghost"
           size="sm"

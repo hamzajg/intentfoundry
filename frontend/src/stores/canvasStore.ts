@@ -12,6 +12,129 @@ import {
 } from '@xyflow/react';
 import { specApi, adrApi, contextApi, fitnessApi, loopApi } from '../api/client';
 import type { SpecOut, ADROut, BoundedContextOut, FitnessFunctionOut, IterationOut } from '../api/client';
+import { canvasApi } from '../api/canvasApi';
+
+interface EntityBundle {
+  specs: SpecOut[];
+  adrs: ADROut[];
+  contexts: BoundedContextOut[];
+  fitness: FitnessFunctionOut[];
+  iterations: IterationOut[];
+}
+
+function buildSpecAdrEdges(specs: SpecOut[], adrs: ADROut[]): Edge[] {
+  const adrIds = new Set(adrs.map((a) => a.id));
+  const edges: Edge[] = [];
+  specs.forEach((spec) => {
+    spec.linked_adr_ids?.forEach((adrId) => {
+      if (adrIds.has(adrId)) {
+        edges.push({
+          id: `edge-${spec.id}-${adrId}`,
+          source: spec.id,
+          target: adrId,
+          type: 'custom',
+          label: 'links to',
+          animated: true,
+          style: { stroke: '#3b82f6', strokeWidth: 1.5, strokeDasharray: '5,5' },
+        });
+      }
+    });
+  });
+  return edges;
+}
+
+function buildNodesFromEntities(entities: EntityBundle): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
+  const nodes: Node<CanvasNodeData>[] = [];
+  const spacingX = 280;
+  const spacingY = 180;
+  let col = 0;
+  let row = 0;
+  const maxPerRow = 4;
+
+  const addNodes = (
+    items: { id: string; title?: string; name?: string }[],
+    type: CanvasNodeType,
+    getLabel: (item: { id: string; title?: string; name?: string }) => string,
+    getEntity: (item: unknown) => SpecOut | ADROut | BoundedContextOut | FitnessFunctionOut | IterationOut | undefined,
+    getStatus?: (item: unknown) => string | undefined,
+    getFormat?: (item: unknown) => string | undefined,
+  ) => {
+    items.forEach((item) => {
+      nodes.push({
+        id: item.id,
+        type,
+        position: { x: col * spacingX, y: row * spacingY },
+        data: {
+          label: getLabel(item),
+          entity: getEntity(item),
+          status: getStatus?.(item),
+          format: getFormat?.(item),
+        },
+        style: { width: 240 },
+      });
+      col += 1;
+      if (col >= maxPerRow) {
+        col = 0;
+        row += 1;
+      }
+    });
+  };
+
+  addNodes(entities.specs, 'spec', (s) => (s as SpecOut).title, (s) => s as SpecOut, (s) => (s as SpecOut).status, (s) => (s as SpecOut).format);
+  addNodes(entities.adrs, 'adr', (a) => `ADR-${(a as ADROut).number}: ${(a as ADROut).title}`, (a) => a as ADROut, (a) => (a as ADROut).status);
+  addNodes(entities.contexts, 'context', (c) => (c as BoundedContextOut).name, (c) => c as BoundedContextOut);
+  addNodes(entities.fitness, 'fitness', (f) => (f as FitnessFunctionOut).name, (f) => f as FitnessFunctionOut, (f) => ((f as FitnessFunctionOut).is_active ? 'active' : 'inactive'));
+  addNodes(entities.iterations, 'iteration', (i) => `Iter: ${(i as IterationOut).name}`, (i) => i as IterationOut, (i) => (i as IterationOut).current_stage);
+
+  return { nodes, edges: buildSpecAdrEdges(entities.specs, entities.adrs) };
+}
+
+function mergeSavedLayout(
+  savedNodes: Node<CanvasNodeData>[],
+  savedEdges: Edge[],
+  entities: EntityBundle,
+): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
+  const entityMeta = new Map<string, { type: CanvasNodeType; label: string; entity: unknown; status?: string; format?: string }>();
+
+  entities.specs.forEach((s) => entityMeta.set(s.id, { type: 'spec', label: s.title, entity: s, status: s.status, format: s.format }));
+  entities.adrs.forEach((a) => entityMeta.set(a.id, { type: 'adr', label: `ADR-${a.number}: ${a.title}`, entity: a, status: a.status }));
+  entities.contexts.forEach((c) => entityMeta.set(c.id, { type: 'context', label: c.name, entity: c }));
+  entities.fitness.forEach((f) => entityMeta.set(f.id, { type: 'fitness', label: f.name, entity: f, status: f.is_active ? 'active' : 'inactive' }));
+  entities.iterations.forEach((i) => entityMeta.set(i.id, { type: 'iteration', label: `Iter: ${i.name}`, entity: i, status: i.current_stage }));
+
+  const savedIds = new Set(savedNodes.map((n) => n.id));
+  const mergedNodes = savedNodes.map((node) => {
+    const fresh = entityMeta.get(node.id);
+    if (!fresh) return node;
+    return {
+      ...node,
+      type: fresh.type,
+      data: {
+        ...node.data,
+        label: fresh.label,
+        entity: fresh.entity,
+        status: fresh.status,
+        format: fresh.format,
+      },
+    };
+  });
+
+  const { nodes: entityNodes } = buildNodesFromEntities(entities);
+  const newEntityNodes = entityNodes.filter((n) => !savedIds.has(n.id));
+  const maxY = savedNodes.reduce((max, n) => Math.max(max, n.position.y), 0);
+  const offsetNewNodes = newEntityNodes.map((n, i) => ({
+    ...n,
+    position: { x: (i % 4) * 280, y: maxY + 200 + Math.floor(i / 4) * 180 },
+  }));
+
+  const specAdrEdges = buildSpecAdrEdges(entities.specs, entities.adrs);
+  const savedEdgeIds = new Set(savedEdges.map((e) => e.id));
+  const newEdges = specAdrEdges.filter((e) => !savedEdgeIds.has(e.id));
+
+  return { nodes: [...mergedNodes, ...offsetNewNodes], edges: [...savedEdges, ...newEdges] };
+}
+
+let saveDebounceTimer: ReturnType<typeof setTimeout> | null = null;
 
 export type CanvasMode =
   | 'default'
@@ -125,7 +248,7 @@ export type SyncStatus = 'idle' | 'loading' | 'syncing' | 'error' | 'loaded' | '
 
 export interface SyncQueueItem {
   id: string;
-  type: 'node_add' | 'node_update' | 'node_delete' | 'edge_add' | 'edge_delete';
+  type: 'node_add' | 'node_update' | 'node_delete' | 'edge_add' | 'edge_delete' | 'save_layout';
   payload: unknown;
   timestamp: number;
   retryCount: number;
@@ -168,12 +291,19 @@ export interface PaletteItem {
 }
 
 interface CanvasState {
+  projectId: string | null;
   mode: CanvasMode;
   nodes: Node<CanvasNodeData>[];
   edges: Edge[];
+  rootNodes: Node<CanvasNodeData>[];
+  rootEdges: Edge[];
+  viewport: { x: number; y: number; zoom: number };
   onNodesChange: OnNodesChange;
   onEdgesChange: OnEdgesChange;
   onConnect: (connection: Connection) => void;
+  setViewport: (viewport: { x: number; y: number; zoom: number }) => void;
+  saveCanvas: (projectId?: string) => Promise<void>;
+  scheduleSave: () => void;
 
   selectedNodeId: string | null;
   setSelectedNode: (id: string | null) => void;
@@ -212,6 +342,7 @@ interface CanvasState {
   drillIn: (node: Node<CanvasNodeData>) => void;
   drillOut: () => void;
   drillToBreadcrumb: (index: number) => void;
+  drillToRoot: () => void;
   isContainerNode: (type: CanvasNodeType | string) => boolean;
 
   setMode: (mode: CanvasMode) => void;
@@ -233,27 +364,62 @@ function uniqueId() {
 export const useCanvasStore = create<CanvasState>()(
   persist(
     (set, get) => ({
+      projectId: null,
       mode: 'default',
       nodes: [],
       edges: [],
+      rootNodes: [],
+      rootEdges: [],
+      viewport: { x: 0, y: 0, zoom: 1 },
+
+      setViewport: (viewport) => {
+        set({ viewport });
+        get().scheduleSave();
+      },
+
+      scheduleSave: () => {
+        if (saveDebounceTimer) clearTimeout(saveDebounceTimer);
+        saveDebounceTimer = setTimeout(() => {
+          const state = get();
+          if (!state.projectId) return;
+          if (state.isOnline) {
+            void state.saveCanvas();
+          } else {
+            state.addToSyncQueue({ type: 'save_layout', payload: {} });
+            set({ syncStatus: 'pending' });
+          }
+        }, 1500);
+      },
+
+      async saveCanvas(projectId) {
+        const id = projectId || get().projectId;
+        if (!id) return;
+
+        set({ syncStatus: 'syncing' });
+        try {
+          const { nodes, edges, viewport } = get();
+          await canvasApi.saveLayout(id, { nodes, edges, viewport });
+          set({ syncStatus: 'loaded', lastSyncedAt: Date.now(), projectId: id });
+        } catch (err) {
+          console.error('Failed to save canvas:', err);
+          if (!get().isOnline) {
+            get().addToSyncQueue({ type: 'save_layout', payload: {} });
+            set({ syncStatus: 'offline' });
+          } else {
+            set({ syncStatus: 'error' });
+          }
+        }
+      },
 
       onNodesChange: (changes) => {
         const updatedNodes = applyNodeChanges(changes, get().nodes) as Node<CanvasNodeData>[];
         set({ nodes: updatedNodes });
-        
-        // Queue changes for sync when offline
-        changes.forEach(change => {
-          if ('type' in change && change.type === 'position') {
-            get().addToSyncQueue({
-              type: 'node_update',
-              payload: { id: (change as any).id, position: (change as any).position },
-            });
-          }
-        });
+        get().scheduleSave();
       },
 
       onEdgesChange: (changes) => {
         set({ edges: applyEdgeChanges(changes, get().edges) });
+        get().scheduleSave();
       },
 
       onConnect: (connection) => {
@@ -266,11 +432,7 @@ export const useCanvasStore = create<CanvasState>()(
         };
         const updatedEdges = addEdge(newEdge, get().edges);
         set({ edges: updatedEdges });
-        
-        get().addToSyncQueue({
-          type: 'edge_add',
-          payload: connection,
-        });
+        get().scheduleSave();
       },
 
   selectedNodeId: null,
@@ -298,88 +460,51 @@ export const useCanvasStore = create<CanvasState>()(
   },
 
   async loadCanvas(projectId) {
-    set({ syncStatus: 'loading' });
+    set({ syncStatus: 'loading', projectId });
     try {
-      const [specsRes, adrsRes, contextsRes, fitnessRes, iterationsRes] = await Promise.all([
+      const [specsRes, adrsRes, contextsRes, fitnessRes, iterationsRes, layoutRes] = await Promise.all([
         specApi.list(projectId, { page_size: 100 }),
         adrApi.list(projectId, { page_size: 100 }),
         contextApi.boundedContexts(projectId),
         fitnessApi.list(projectId),
         loopApi.list(projectId),
+        canvasApi.getLayout(projectId).catch(() => ({ data: { nodes: [], edges: [], viewport: null } })),
       ]);
 
-      const specs: SpecOut[] = specsRes.data.items || specsRes.data;
-      const adrs: ADROut[] = adrsRes.data.items || adrsRes.data;
-      const contexts: BoundedContextOut[] = contextsRes.data;
-      const fitness: FitnessFunctionOut[] = fitnessRes.data;
-      const iterations: IterationOut[] = iterationsRes.data;
-
-      const nodes: Node<CanvasNodeData>[] = [];
-      const edges: Edge[] = [];
-
-      const spacingX = 280;
-      const spacingY = 180;
-      let col = 0;
-      let row = 0;
-      const maxPerRow = 4;
-
-      const addNodes = (
-        items: { id: string; title?: string; name?: string }[],
-        type: CanvasNodeType,
-        getLabel: (item: { id: string; title?: string; name?: string }) => string,
-        getEntity: (item: unknown) => SpecOut | ADROut | BoundedContextOut | FitnessFunctionOut | IterationOut | undefined,
-        getStatus?: (item: unknown) => string | undefined,
-        getFormat?: (item: unknown) => string | undefined,
-      ) => {
-        items.forEach((item) => {
-          const x = col * spacingX;
-          const y = row * spacingY;
-          nodes.push({
-            id: item.id,
-            type,
-            position: { x, y },
-            data: {
-              label: getLabel(item),
-              entity: getEntity(item),
-              status: getStatus?.(item),
-              format: getFormat?.(item),
-            },
-            style: { width: 240 },
-          });
-
-          col += 1;
-          if (col >= maxPerRow) {
-            col = 0;
-            row += 1;
-          }
-        });
+      const entities: EntityBundle = {
+        specs: specsRes.data.items || specsRes.data,
+        adrs: adrsRes.data.items || adrsRes.data,
+        contexts: contextsRes.data,
+        fitness: fitnessRes.data,
+        iterations: iterationsRes.data,
       };
 
-      addNodes(specs, 'spec', (s) => (s as SpecOut).title, (s) => s as SpecOut, (s) => (s as SpecOut).status, (s) => (s as SpecOut).format);
-      addNodes(adrs, 'adr', (a) => `ADR-${(a as ADROut).number}: ${(a as ADROut).title}`, (a) => a as ADROut, (a) => (a as ADROut).status);
-      addNodes(contexts, 'context', (c) => (c as BoundedContextOut).name, (c) => c as BoundedContextOut);
-      addNodes(fitness, 'fitness', (f) => (f as FitnessFunctionOut).name, (f) => f as FitnessFunctionOut, (f) => (f as FitnessFunctionOut).is_active ? 'active' : 'inactive');
-      addNodes(iterations, 'iteration', (i) => `Iter: ${(i as IterationOut).name}`, (i) => i as IterationOut, (i) => (i as IterationOut).current_stage);
+      const savedLayout = layoutRes.data;
+      const savedNodes = (savedLayout.nodes || []) as Node<CanvasNodeData>[];
+      const savedEdges = (savedLayout.edges || []) as Edge[];
 
-      specs.forEach((spec) => {
-        if (spec.linked_adr_ids) {
-          spec.linked_adr_ids.forEach((adrId) => {
-            if (adrs.find((a) => a.id === adrId)) {
-              edges.push({
-                id: `edge-${spec.id}-${adrId}`,
-                source: spec.id,
-                target: adrId,
-                type: 'custom',
-                label: 'links to',
-                animated: true,
-                style: { stroke: '#3b82f6', strokeWidth: 1.5, strokeDasharray: '5,5' },
-              });
-            }
-          });
-        }
+      let nodes: Node<CanvasNodeData>[];
+      let edges: Edge[];
+
+      if (savedNodes.length > 0) {
+        ({ nodes, edges } = mergeSavedLayout(savedNodes, savedEdges, entities));
+      } else {
+        ({ nodes, edges } = buildNodesFromEntities(entities));
+      }
+
+      const viewport = savedLayout.viewport || { x: 0, y: 0, zoom: 1 };
+
+      set({
+        nodes,
+        edges,
+        rootNodes: nodes,
+        rootEdges: edges,
+        viewport,
+        currentNodeId: null,
+        breadcrumbs: [],
+        syncStatus: 'loaded',
+        projectId,
       });
-
-      set({ nodes, edges, syncStatus: 'loaded' });
     } catch (err) {
       console.error('Failed to load canvas:', err);
       set({ syncStatus: 'error' });
@@ -450,6 +575,7 @@ export const useCanvasStore = create<CanvasState>()(
       style: { width: 240 },
     };
     set({ nodes: [...get().nodes, newNode], selectedNodeId: id, rightPanelOpen: true });
+    get().scheduleSave();
   },
 
   updateNodeData(nodeId, updates) {
@@ -458,6 +584,7 @@ export const useCanvasStore = create<CanvasState>()(
         n.id === nodeId ? { ...n, data: { ...n.data, ...updates } } : n
       ),
     });
+    get().scheduleSave();
   },
 
   deleteNode(nodeId) {
@@ -467,6 +594,7 @@ export const useCanvasStore = create<CanvasState>()(
       selectedNodeId: get().selectedNodeId === nodeId ? null : get().selectedNodeId,
       rightPanelOpen: get().selectedNodeId === nodeId ? false : get().rightPanelOpen,
     });
+    get().scheduleSave();
   },
 
   autoLayout() {
@@ -501,10 +629,12 @@ export const useCanvasStore = create<CanvasState>()(
     });
 
     set({ nodes: layouted });
+    get().scheduleSave();
   },
 
   clearCanvas() {
-    set({ nodes: [], edges: [], selectedNodeId: null, rightPanelOpen: false });
+    set({ nodes: [], edges: [], selectedNodeId: null, rightPanelOpen: false, rootNodes: [], rootEdges: [] });
+    get().scheduleSave();
   },
 
   duplicateNode(nodeId) {
@@ -519,6 +649,7 @@ export const useCanvasStore = create<CanvasState>()(
       style: { ...source.style },
     };
     set({ nodes: [...get().nodes, newNode], selectedNodeId: id, rightPanelOpen: true });
+    get().scheduleSave();
   },
 
   // Drill-down implementation
@@ -538,29 +669,26 @@ export const useCanvasStore = create<CanvasState>()(
   drillIn: (node) => {
     const state = get();
     if (!state.isContainerNode(node.type || 'unknown')) return;
-    
-    // Add to breadcrumbs
+
     const newBreadcrumb: Breadcrumb = { id: node.id, label: node.data.label };
     const newBreadcrumbs = [...state.breadcrumbs, newBreadcrumb];
-    
-    // Initialize internal canvas if not exists
     const internalNodes = node.data.internalNodes || [];
     const internalEdges = node.data.internalEdges || [];
-    
-    // Set transitioning state
+
+    const enteringRoot = state.breadcrumbs.length === 0;
+
     set({
       isTransitioning: true,
       transitionTargetNode: node.id,
       currentNodeId: node.id,
       breadcrumbs: newBreadcrumbs,
-      // Load internal content or initialize empty
+      ...(enteringRoot ? { rootNodes: state.nodes, rootEdges: state.edges } : {}),
       nodes: internalNodes.length > 0 ? internalNodes : [],
       edges: internalEdges.length > 0 ? internalEdges : [],
       selectedNodeId: null,
       rightPanelOpen: false,
     });
-    
-    // Clear transitioning state after animation
+
     setTimeout(() => {
       set({ isTransitioning: false, transitionTargetNode: null });
     }, 300);
@@ -569,18 +697,15 @@ export const useCanvasStore = create<CanvasState>()(
   drillOut: () => {
     const state = get();
     if (state.breadcrumbs.length === 0) return;
-    
-    const parentBreadcrumb = state.breadcrumbs[state.breadcrumbs.length - 2];
+
     const currentNodeId = state.currentNodeId;
-    
-    // Save current internal canvas to parent before drilling out
+    const currentNodes = state.nodes;
+    const currentEdges = state.edges;
+    const parentBreadcrumb = state.breadcrumbs[state.breadcrumbs.length - 2];
+
     if (currentNodeId) {
-      const currentNodes = state.nodes;
-      const currentEdges = state.edges;
-      
-      // Update parent's internal nodes
-      set({
-        nodes: get().nodes.map((n) => {
+      const updateNodeTree = (nodes: Node<CanvasNodeData>[]): Node<CanvasNodeData>[] =>
+        nodes.map((n) => {
           if (n.id === currentNodeId) {
             return {
               ...n,
@@ -593,57 +718,80 @@ export const useCanvasStore = create<CanvasState>()(
               },
             };
           }
+          if (n.data.internalNodes?.length) {
+            return { ...n, data: { ...n.data, internalNodes: updateNodeTree(n.data.internalNodes) } };
+          }
           return n;
-        }),
-      });
+        });
+
+      const updatedRootNodes = updateNodeTree(state.rootNodes);
+      set({ rootNodes: updatedRootNodes });
     }
-    
+
     if (!parentBreadcrumb) {
-      // Return to root canvas (reload from API)
       set({
         currentNodeId: null,
         breadcrumbs: [],
-        isTransitioning: false,
+        nodes: get().rootNodes,
+        edges: get().rootEdges,
+        isTransitioning: true,
         transitionTargetNode: null,
       });
     } else {
-      // Navigate to parent
-      const parentNode = state.nodes.find((n) => n.id === parentBreadcrumb.id);
-      if (parentNode) {
-        set({
-          currentNodeId: parentBreadcrumb.id,
-          breadcrumbs: state.breadcrumbs.slice(0, -1),
-          nodes: parentNode.data.internalNodes || [],
-          edges: parentNode.data.internalEdges || [],
-          isTransitioning: true,
-          transitionTargetNode: parentBreadcrumb.id,
-        });
-        
-        setTimeout(() => {
-          set({ isTransitioning: false, transitionTargetNode: null });
-        }, 300);
-      }
+      const parentNode = get().rootNodes.find((n) => n.id === parentBreadcrumb.id);
+      set({
+        currentNodeId: parentBreadcrumb.id,
+        breadcrumbs: state.breadcrumbs.slice(0, -1),
+        nodes: parentNode?.data.internalNodes || [],
+        edges: parentNode?.data.internalEdges || [],
+        isTransitioning: true,
+        transitionTargetNode: parentBreadcrumb.id,
+      });
     }
+
+    setTimeout(() => {
+      set({ isTransitioning: false, transitionTargetNode: null });
+    }, 300);
+
+    get().scheduleSave();
   },
 
   drillToBreadcrumb: (index) => {
     const state = get();
-    if (index >= state.breadcrumbs.length) return;
-    
+    if (index < 0 || index >= state.breadcrumbs.length) return;
+
     const targetBreadcrumb = state.breadcrumbs[index];
-    const targetNode = state.nodes.find((n) => n.id === targetBreadcrumb.id);
-    
-    if (!targetNode) return;
-    
+    const targetNode = state.rootNodes.find((n) => n.id === targetBreadcrumb.id);
+
+    if (targetNode) {
+      set({
+        currentNodeId: targetBreadcrumb.id,
+        breadcrumbs: state.breadcrumbs.slice(0, index + 1),
+        nodes: targetNode.data.internalNodes || [],
+        edges: targetNode.data.internalEdges || [],
+        isTransitioning: true,
+        transitionTargetNode: targetBreadcrumb.id,
+      });
+    }
+
+    setTimeout(() => {
+      set({ isTransitioning: false, transitionTargetNode: null });
+    }, 300);
+  },
+
+  drillToRoot: () => {
+    const state = get();
+    if (state.breadcrumbs.length === 0) return;
+
     set({
-      currentNodeId: targetBreadcrumb.id,
-      breadcrumbs: state.breadcrumbs.slice(0, index + 1),
-      nodes: targetNode.data.internalNodes || [],
-      edges: targetNode.data.internalEdges || [],
+      currentNodeId: null,
+      breadcrumbs: [],
+      nodes: state.rootNodes,
+      edges: state.rootEdges,
       isTransitioning: true,
-      transitionTargetNode: targetBreadcrumb.id,
+      transitionTargetNode: null,
     });
-    
+
     setTimeout(() => {
       set({ isTransitioning: false, transitionTargetNode: null });
     }, 300);
@@ -658,6 +806,11 @@ export const useCanvasStore = create<CanvasState>()(
   
   addToSyncQueue: (item) => {
     const state = get();
+    if (item.type === 'save_layout') {
+      const hasPendingSave = state.syncQueue.some((q) => q.type === 'save_layout');
+      if (hasPendingSave) return;
+    }
+
     const queueItem: SyncQueueItem = {
       ...item,
       id: `sync-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -665,9 +818,9 @@ export const useCanvasStore = create<CanvasState>()(
       retryCount: 0,
     };
     set({ syncQueue: [...state.syncQueue, queueItem] });
-    
+
     if (state.isOnline) {
-      state.processSyncQueue();
+      void state.processSyncQueue();
     }
   },
   
@@ -678,40 +831,23 @@ export const useCanvasStore = create<CanvasState>()(
   processSyncQueue: async () => {
     const state = get();
     if (!state.isOnline || state.syncQueue.length === 0) return;
-    
+
     set({ syncStatus: 'syncing' });
-    
-    for (const item of state.syncQueue) {
+
+    const pendingSave = state.syncQueue.some((item) => item.type === 'save_layout');
+    if (pendingSave && state.projectId) {
       try {
-        switch (item.type) {
-          case 'node_add':
-            break;
-          case 'node_update':
-            break;
-          case 'node_delete':
-            break;
-          case 'edge_add':
-            break;
-          case 'edge_delete':
-            break;
-        }
-        set({ syncQueue: get().syncQueue.filter(i => i.id !== item.id) });
+        await state.saveCanvas();
+        set({ syncQueue: get().syncQueue.filter((item) => item.type !== 'save_layout') });
       } catch {
-        if (item.retryCount < 3) {
-          set({
-            syncQueue: get().syncQueue.map(i => 
-              i.id === item.id ? { ...i, retryCount: i.retryCount + 1 } : i
-            ),
-          });
-        } else {
-          set({ syncQueue: get().syncQueue.filter(i => i.id !== item.id) });
-        }
+        set({ syncStatus: 'error' });
+        return;
       }
     }
-    
-    set({ 
-      syncStatus: 'loaded',
-      lastSyncedAt: Date.now() 
+
+    set({
+      syncStatus: get().syncQueue.length > 0 ? 'pending' : 'loaded',
+      lastSyncedAt: Date.now(),
     });
   },
   
@@ -721,8 +857,6 @@ export const useCanvasStore = create<CanvasState>()(
       name: 'intentfoundry-canvas',
       storage: createJSONStorage(() => localStorage),
       partialize: (state) => ({
-        nodes: state.nodes,
-        edges: state.edges,
         mode: state.mode,
         lastSyncedAt: state.lastSyncedAt,
       }),

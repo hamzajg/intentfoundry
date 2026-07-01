@@ -605,3 +605,73 @@ class TestTelemetry:
         r = await client.get("/health")
         assert r.status_code == 200
         assert r.json()["status"] in ("healthy", "degraded")
+
+
+# ─── Canvas module ────────────────────────────────────────────────────────────
+
+class TestCanvas:
+    async def test_get_empty_canvas(
+        self, client: AsyncClient, auth_headers: dict, test_project: dict
+    ):
+        pid = test_project["id"]
+        r = await client.get(f"/api/v1/projects/{pid}/canvas", headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()
+        assert data["project_id"] == pid
+        assert data["nodes"] == []
+        assert data["edges"] == []
+
+    async def test_save_and_load_canvas(
+        self, client: AsyncClient, auth_headers: dict, test_project: dict
+    ):
+        pid = test_project["id"]
+        payload = {
+            "nodes": [
+                {
+                    "id": "node-1",
+                    "type": "spec",
+                    "position": {"x": 100, "y": 200},
+                    "data": {"label": "Login Spec"},
+                }
+            ],
+            "edges": [],
+            "viewport": {"x": 0, "y": 0, "zoom": 1.25},
+        }
+        r = await client.post(
+            f"/api/v1/projects/{pid}/canvas",
+            json=payload,
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        saved = r.json()
+        assert len(saved["nodes"]) == 1
+        assert saved["nodes"][0]["id"] == "node-1"
+        assert saved["viewport"]["zoom"] == 1.25
+        assert saved["updated_at"] is not None
+
+        r2 = await client.get(f"/api/v1/projects/{pid}/canvas", headers=auth_headers)
+        assert r2.status_code == 200
+        loaded = r2.json()
+        assert loaded["nodes"][0]["data"]["label"] == "Login Spec"
+
+    async def test_delete_canvas(
+        self, client: AsyncClient, auth_headers: dict, test_project: dict
+    ):
+        pid = test_project["id"]
+        await client.post(
+            f"/api/v1/projects/{pid}/canvas",
+            json={"nodes": [{"id": "n1", "type": "group", "position": {"x": 0, "y": 0}, "data": {}}], "edges": []},
+            headers=auth_headers,
+        )
+        r = await client.delete(f"/api/v1/projects/{pid}/canvas", headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json()["status"] == "deleted"
+
+        r2 = await client.get(f"/api/v1/projects/{pid}/canvas", headers=auth_headers)
+        assert r2.status_code == 200
+        assert r2.json()["nodes"] == []
+
+    async def test_canvas_requires_auth(self, client: AsyncClient, test_project: dict):
+        pid = test_project["id"]
+        r = await client.get(f"/api/v1/projects/{pid}/canvas")
+        assert r.status_code == 401
