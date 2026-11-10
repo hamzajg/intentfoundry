@@ -132,7 +132,7 @@ export function DetailPanel() {
           node={selectedNode} 
           isContainer={isNodeContainer} 
           childCount={childrenCount}
-          onDrillIn={() => drillIn(selectedNode as any)}
+          onDrillIn={() => drillIn(selectedNode)}
         />
       </div>
     </div>

@@ -94,7 +94,8 @@ function mergeSavedLayout(
   savedEdges: Edge[],
   entities: EntityBundle,
 ): { nodes: Node<CanvasNodeData>[]; edges: Edge[] } {
-  const entityMeta = new Map<string, { type: CanvasNodeType; label: string; entity: unknown; status?: string; format?: string }>();
+  type CanvasEntity = NonNullable<CanvasNodeData['entity']>;
+  const entityMeta = new Map<string, { type: CanvasNodeType; label: string; entity: CanvasEntity; status?: string; format?: string }>();
 
   entities.specs.forEach((s) => entityMeta.set(s.id, { type: 'spec', label: s.title, entity: s, status: s.status, format: s.format }));
   entities.adrs.forEach((a) => entityMeta.set(a.id, { type: 'adr', label: `ADR-${a.number}: ${a.title}`, entity: a, status: a.status }));
