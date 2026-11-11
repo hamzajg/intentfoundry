@@ -6,18 +6,21 @@ import asyncio
 import json
 from datetime import UTC, datetime
 
+import structlog
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy import desc, func, select
 
 from app.api.v1.deps import CurrentUser, DB, get_project_or_404
 from app.core.config import get_settings
+from app.core.redis import subscribe_telemetry_events
 from app.models.domain import LoopMetric, Project, Iteration, IterationStatus, TelemetryEvent
 from app.schemas.schemas import LoopMetricOut, ProjectHealthOut, TelemetryEventOut
-from app.services.telemetry_service import TelemetryService
+from app.services.telemetry_service import TelemetryService, serialize_event
 
 settings = get_settings()
 router = APIRouter(prefix="/projects/{project_id}/telemetry", tags=["telemetry"])
+log = structlog.get_logger()
 
 
 @router.get("/events", response_model=list[TelemetryEventOut])
@@ -159,11 +162,27 @@ async def stream_telemetry(
                 break
 
             if settings.redis_enabled:
-                # Production: Redis pub/sub (non-blocking)
-                # This would subscribe to if:telemetry:{project_id}
-                # and yield events as they arrive.
-                # Full Redis implementation in Phase 2.
-                await asyncio.sleep(0.1)
+                # Production: consume events pushed to the project's pub/sub channel.
+                try:
+                    async for message in subscribe_telemetry_events(project_id):
+                        if await request.is_disconnected():
+                            return
+                        if message is None:
+                            # Poll timeout — emit keepalive so proxies don't close us.
+                            keepalive_counter += 1
+                            if keepalive_counter >= settings.sse_keepalive_seconds:
+                                yield _sse_comment("keepalive")
+                                keepalive_counter = 0
+                            continue
+                        keepalive_counter = 0
+                        yield _sse_event(message.get("event_type", "telemetry"), message)
+                except Exception as exc:  # noqa: BLE001 — never crash the stream
+                    log.warning(
+                        "telemetry.redis_stream_failed",
+                        project_id=project_id,
+                        error=str(exc),
+                    )
+                return
             else:
                 # Dev mode: poll DB for new events since last_event_id
                 from app.db.database import AsyncSessionLocal
@@ -189,16 +208,7 @@ async def stream_telemetry(
 
                 for event in events:
                     last_event_id = event.id
-                    yield _sse_event(
-                        event.event_type,
-                        {
-                            "event_id": event.id,
-                            "event_type": event.event_type,
-                            "payload": event.payload,
-                            "iteration_id": event.iteration_id,
-                            "timestamp": event.created_at.isoformat(),
-                        },
-                    )
+                    yield _sse_event(event.event_type, serialize_event(event))
 
             # Keepalive comment every N seconds to prevent proxy timeouts
             keepalive_counter += 1

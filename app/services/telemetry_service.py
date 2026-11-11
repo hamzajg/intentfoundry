@@ -17,7 +17,19 @@ from app.models.domain import (
     IterationStatus,
     TelemetryEvent,
 )
+from app.core.redis import publish_telemetry_event
 from app.schemas.schemas import ProjectHealthOut
+
+
+def serialize_event(event: TelemetryEvent) -> dict[str, Any]:
+    """Shape a telemetry event for SSE / pub-sub delivery."""
+    return {
+        "event_id": event.id,
+        "event_type": event.event_type,
+        "payload": event.payload,
+        "iteration_id": event.iteration_id,
+        "timestamp": event.created_at.isoformat() if event.created_at else None,
+    }
 
 
 class TelemetryService:
@@ -48,8 +60,9 @@ class TelemetryService:
         self.db.add(event)
         await self.db.flush()
 
-        # TODO Phase 2: publish to Redis pub/sub
-        # if redis_enabled: await redis.publish(f"if:telemetry:{project_id}", event.json())
+        # Best-effort fan-out to Redis pub/sub for real-time SSE clients.
+        # No-op when Redis is disabled; never raises.
+        await publish_telemetry_event(project_id, serialize_event(event))
 
         return event
 
