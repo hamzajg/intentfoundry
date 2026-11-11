@@ -7,9 +7,10 @@ import {
   ReactFlowProvider,
   useReactFlow,
   type NodeMouseHandler,
+  type Node,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCanvasStore, type CanvasNodeType } from '../../stores/canvasStore';
+import { useCanvasStore, type CanvasNodeType, type CanvasNodeData } from '../../stores/canvasStore';
 import { SpecNode } from './nodes/SpecNode';
 import { ADRNode } from './nodes/ADRNode';
 import { ContextNode } from './nodes/ContextNode';
@@ -252,7 +253,7 @@ function CanvasContent() {
     
     if (timeDiff < 300 && isContainerNode(node.type || '')) {
       // Double click - drill in
-      drillIn(node as any);
+      drillIn(node as Node<CanvasNodeData>);
       lastClickTime.current = 0;
     } else {
       // Single click - select
