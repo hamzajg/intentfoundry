@@ -2,12 +2,12 @@
 Unit tests for TelemetryService health score computation.
 Tests the pure `_compute_health_score` function and mock-based service tests.
 """
-from unittest.mock import MagicMock, AsyncMock
+from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.services.telemetry_service import _compute_health_score
-
 
 # ─── Health Score Computation (pure function) ─────────────────────────────────
 
@@ -202,3 +202,52 @@ class TestEmit:
             source="cli",
         )
         assert event.source == "cli"
+
+    async def test_emit_publishes_serialized_event_to_redis(self, service, monkeypatch):
+        from app.services import telemetry_service as ts
+
+        published = AsyncMock()
+        monkeypatch.setattr(ts, "publish_telemetry_event", published)
+
+        await service.emit(project_id="p1", event_type="spec.created", payload={"k": "v"})
+
+        published.assert_awaited_once()
+        channel_project_id, message = published.await_args.args
+        assert channel_project_id == "p1"
+        assert message["event_type"] == "spec.created"
+        assert message["payload"] == {"k": "v"}
+
+
+# ─── Event serialization ──────────────────────────────────────────────────────
+
+class TestSerializeEvent:
+    def test_shapes_all_fields(self):
+        from app.models.domain import TelemetryEvent
+        from app.services.telemetry_service import serialize_event
+
+        event = TelemetryEvent(
+            project_id="p1",
+            event_type="fitness.failed",
+            payload={"reason": "lint"},
+            iteration_id="i1",
+        )
+        event.id = "01HX"
+        event.created_at = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC)
+
+        assert serialize_event(event) == {
+            "event_id": "01HX",
+            "event_type": "fitness.failed",
+            "payload": {"reason": "lint"},
+            "iteration_id": "i1",
+            "timestamp": "2026-01-02T03:04:05+00:00",
+        }
+
+    def test_missing_timestamp_is_none(self):
+        from app.models.domain import TelemetryEvent
+        from app.services.telemetry_service import serialize_event
+
+        event = TelemetryEvent(project_id="p1", event_type="x", payload={})
+        event.id = "01HY"
+        event.created_at = None
+
+        assert serialize_event(event)["timestamp"] is None

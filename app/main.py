@@ -20,6 +20,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.v1.router import api_router
 from app.core.config import get_settings
+from app.core.redis import close_redis
 from app.db.database import Base, check_db_connection, engine
 from app.models import domain  # noqa: F401 — registers all models with Base
 
@@ -47,6 +48,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Cleanup
+    await close_redis()
     await engine.dispose()
     log.info("intentfoundry.shutdown")
 
