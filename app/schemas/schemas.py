@@ -362,6 +362,15 @@ class BoundedContextCreate(APIBase):
     interfaces: dict[str, Any] = Field(default_factory=dict)
 
 
+class BoundedContextUpdate(APIBase):
+    """Partial update — every field optional; `None` leaves the stored value."""
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    includes: str | None = None
+    excludes: str | None = None
+    interfaces: dict[str, Any] | None = None
+
+
 class BoundedContextOut(APIBase):
     id: str
     project_id: str

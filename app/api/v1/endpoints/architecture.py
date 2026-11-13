@@ -29,6 +29,7 @@ from app.schemas.schemas import (
     AIContextResponse,
     BoundedContextCreate,
     BoundedContextOut,
+    BoundedContextUpdate,
     FitnessFunctionCreate,
     FitnessFunctionOut,
     FitnessFunctionUpdate,
@@ -368,16 +369,33 @@ async def get_bounded_context(
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    result = await db.execute(
-        select(BoundedContext).where(
-            BoundedContext.id == context_id,
-            BoundedContext.project_id == project_id,
-            BoundedContext.deleted_at.is_(None),
-        )
-    )
-    ctx = result.scalar_one_or_none()
-    if not ctx:
-        raise HTTPException(status_code=404, detail="Bounded context not found")
+    ctx = await _get_context_or_404(db, context_id, project_id)
+    return BoundedContextOut.model_validate(ctx)
+
+
+@context_router.patch("/{context_id}", response_model=BoundedContextOut)
+async def update_bounded_context(
+    project_id: str,
+    context_id: str,
+    data: BoundedContextUpdate,
+    db: DB,
+    current_user: CurrentUser,
+    project: Project = Depends(get_project_or_404),
+):
+    """Partial update — the frontend's context editor calls this; every field
+    is optional and `None` leaves the stored value untouched."""
+    ctx = await _get_context_or_404(db, context_id, project_id)
+    if data.name is not None:
+        ctx.name = data.name
+    if data.description is not None:
+        ctx.description = data.description
+    if data.includes is not None:
+        ctx.includes = data.includes
+    if data.excludes is not None:
+        ctx.excludes = data.excludes
+    if data.interfaces is not None:
+        ctx.interfaces = data.interfaces
+    await db.flush()
     return BoundedContextOut.model_validate(ctx)
 
 
@@ -389,16 +407,7 @@ async def delete_bounded_context(
     current_user: CurrentUser,
     project: Project = Depends(get_project_or_404),
 ):
-    result = await db.execute(
-        select(BoundedContext).where(
-            BoundedContext.id == context_id,
-            BoundedContext.project_id == project_id,
-            BoundedContext.deleted_at.is_(None),
-        )
-    )
-    ctx = result.scalar_one_or_none()
-    if not ctx:
-        raise HTTPException(status_code=404, detail="Bounded context not found")
+    ctx = await _get_context_or_404(db, context_id, project_id)
     ctx.soft_delete()
 
 
@@ -441,6 +450,22 @@ async def _get_adr_or_404(db: AsyncSession, adr_id: str, project_id: str) -> ADR
     if not adr:
         raise HTTPException(status_code=404, detail="ADR not found")
     return adr
+
+
+async def _get_context_or_404(
+    db: AsyncSession, context_id: str, project_id: str
+) -> BoundedContext:
+    result = await db.execute(
+        select(BoundedContext).where(
+            BoundedContext.id == context_id,
+            BoundedContext.project_id == project_id,
+            BoundedContext.deleted_at.is_(None),
+        )
+    )
+    ctx = result.scalar_one_or_none()
+    if not ctx:
+        raise HTTPException(status_code=404, detail="Bounded context not found")
+    return ctx
 
 
 async def _get_ff_or_404(

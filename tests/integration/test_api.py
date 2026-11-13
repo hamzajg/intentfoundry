@@ -383,6 +383,47 @@ class TestArchitecture:
         assert r.status_code == 201
         assert r.json()["name"] == "Auth Service"
 
+    async def test_update_bounded_context(
+        self, client: AsyncClient, auth_headers: dict, test_project: dict
+    ):
+        """The frontend's context editor PATCHes this route — it must exist
+        and must leave untouched fields alone (partial update semantics)."""
+        pid = test_project["id"]
+        created = await client.post(
+            f"/api/v1/projects/{pid}/contexts",
+            json={
+                "name": "Billing",
+                "description": "Payments and invoicing",
+                "includes": "Charges, refunds",
+                "excludes": "Tax reporting",
+                "interfaces": {"consumes": ["ledger"]},
+            },
+            headers=auth_headers,
+        )
+        assert created.status_code == 201
+        ctx_id = created.json()["id"]
+
+        r = await client.patch(
+            f"/api/v1/projects/{pid}/contexts/{ctx_id}",
+            json={"name": "Billing & Payments", "description": "Charges, refunds, invoicing"},
+            headers=auth_headers,
+        )
+        assert r.status_code == 200
+        data = r.json()
+        assert data["name"] == "Billing & Payments"
+        assert data["description"] == "Charges, refunds, invoicing"
+        # Untouched fields survive the partial update.
+        assert data["includes"] == "Charges, refunds"
+        assert data["excludes"] == "Tax reporting"
+        assert data["interfaces"] == {"consumes": ["ledger"]}
+
+        missing = await client.patch(
+            f"/api/v1/projects/{pid}/contexts/does-not-exist",
+            json={"name": "Nope"},
+            headers=auth_headers,
+        )
+        assert missing.status_code == 404
+
     async def test_ai_context_builder(
         self, client: AsyncClient, auth_headers: dict, test_project: dict
     ):
