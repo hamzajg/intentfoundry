@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Open source human-AI collaboration framework — spec and architecture at the centre"
 readme = "README.md"
 license = { text = "MIT" }
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 authors = [{ name = "Tanoshii Computing", email = "hello@tanoshii-computing.com" }]
 keywords = ["ai", "agile", "specification", "architecture", "human-ai-collaboration"]
 
