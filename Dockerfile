@@ -7,8 +7,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Install dependencies first (better layer caching)
-COPY pyproject.toml .
+# Install dependencies first (better layer caching). pyproject.toml declares
+# `readme = "README.md"` and hatchling ships `app/`, so both have to be here
+# before the editable install can build its metadata.
+COPY pyproject.toml README.md ./
+COPY app ./app/
 RUN pip install --no-cache-dir -e ".[dev]"
 
 # Copy source
