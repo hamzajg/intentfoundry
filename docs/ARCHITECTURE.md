@@ -56,3 +56,6 @@ controls the base; default `/api/v1` assumes same-origin/proxy.
 - SQLite default so the framework runs with zero infrastructure.
 - Fitness functions in CI — architecture rules are executable, not prose.
 - Human checkpoints are enforced in the loop, not advisory.
+- The five-stage loop is the fleet's canonical agent-loop governance
+  reference — see `docs/AGENT_LOOP.md` for the stage table, enforcement
+  mechanics, telemetry, and how other repos' agent surfaces map onto it.
