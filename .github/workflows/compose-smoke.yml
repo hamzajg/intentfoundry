@@ -1,0 +1,68 @@
+name: Compose smoke test
+
+# Boots api + Postgres + Redis from docker-compose. The api service waits on
+# both healthchecks, so a 200 from /health also proves the database and cache
+# dependencies came up — the part the unit tests never exercise.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: compose-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: API answers /health with db and redis up
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Build and start the stack
+        run: docker compose up --build --detach
+
+      - name: Wait for GET /health
+        run: |
+          set -uo pipefail
+          for attempt in $(seq 1 60); do
+            code=$(curl --silent --output /tmp/health.json --write-out '%{http_code}' \
+              http://localhost:8000/health || true)
+            echo "attempt ${attempt}: ${code}"
+            if [ "${code}" = "200" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "::error::the api never answered /health"
+          exit 1
+
+      - name: Health payload is JSON and reports healthy
+        run: |
+          set -euo pipefail
+          curl --silent --show-error http://localhost:8000/health | tee /tmp/health.json
+          echo
+          grep --quiet '{' /tmp/health.json
+          grep --quiet --ignore-case 'healthy\|ok\|up' /tmp/health.json
+
+      - name: OpenAPI document is served
+        # Proves the whole app (not a stub) booted, including its routers.
+        run: |
+          set -euo pipefail
+          code=$(curl --silent --output /tmp/openapi.json --write-out '%{http_code}' \
+            http://localhost:8000/openapi.json)
+          echo "GET /openapi.json -> ${code}"
+          test "${code}" = "200"
+          grep --quiet 'openapi' /tmp/openapi.json
+
+      - name: Container logs
+        if: always()
+        run: docker compose logs --no-color --tail 100
+
+      - name: Tear down
+        if: always()
+        run: docker compose down --volumes --remove-orphans
